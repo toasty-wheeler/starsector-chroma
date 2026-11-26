@@ -4,10 +4,11 @@
 	},
 
 	# Star Chroma options
-	# campaign keyboard background: "spectrum" (Razer default colour cycling), "wave", or "static"
-	"starchroma_baseMode":"spectrum",
+	# campaign keyboard background: "status" (follows fleet movement status and abilities),
+	# or a fixed one: "spectrum" (Razer default colour cycling), "wave", "static"
+	"starchroma_baseMode":"status",
 	"starchroma_baseColor":[0,255,64,255],
-	# campaign keyboard background brightness 0..1 (low, so the highlighted keys stand out)
+	# brightness of the fixed backgrounds 0..1
 	"starchroma_baseBrightness":0.4,
 	# overall brightness 0..1
 	"starchroma_brightness":1.0,

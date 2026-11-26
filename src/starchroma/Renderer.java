@@ -42,7 +42,7 @@ public class Renderer {
 
         int mode = LightState.mode;
         if (mode == LightState.COMBAT) renderCombat(t, dt, nowMs);
-        else renderCampaign(t, dt);
+        else renderCampaign(t, dt, nowMs);
 
         if (1f > Config.brightness) {
             for (int d = 0; d < Devices.COUNT; d++) {
@@ -55,10 +55,34 @@ public class Renderer {
 
     // ------------------------------------------------------------------ campaign
 
-    private void renderCampaign(float t, float dt) {
+    // background colours
+    static final int SILENT_DARK = 0x0E0318, SILENT_LIGHT = 0x2C0E50;
+    static final int NEUTRINO = 0x2E7BFF;
+    static final int PULSE = 0x9FDCFF;
+    static final int TENDRIL_DARK = 0x22073F, TENDRIL = 0x8E34F0, TENDRIL_TIP = 0xE0B0FF;
+    static final int[] STARS_SUSTAINED = {0xFFD040, 0xFF8A20, 0xFF3A10};
+    static final int[] STARS_EMERGENCY = {0xFF2A00, 0xB00000, 0xFF5000};
+
+    // transverse jump animation
+    private float jumpLevel;
+    private float lastJumpCharge;
+    private long jumpHoldUntil;
+    private long jumpFastUntil;
+    private long jumpDoneSeen;
+
+    private void renderCampaign(float t, float dt, long now) {
+        boolean status = "status".equals(Config.baseMode);
+        if (status) updateJump(dt, now);
+
         for (int d = 0; d < Devices.COUNT; d++) {
             int[] a = frame[d];
-            for (int i = 0; i < a.length; i++) a[i] = base(Devices.X[d][i], t);
+            float[] xs = Devices.X[d];
+            float[] ys = Devices.Y[d];
+            float aspect = Devices.ASPECT[d];
+            for (int i = 0; i < a.length; i++) {
+                if (status) a[i] = statusPixel(xs[i], ys[i], aspect, t, now);
+                else a[i] = base(xs[i], t);
+            }
         }
         int[] kb = frame[Devices.KEYBOARD];
 
@@ -81,13 +105,135 @@ public class Renderer {
         }
     }
 
-    /** the "normal" keyboard background in the campaign */
+    /** older fixed backgrounds ("spectrum", "wave", "static") */
     private int base(float x, float t) {
         String m = Config.baseMode;
         float v = Config.baseBrightness;
         if ("static".equals(m)) return scale(Config.baseColor, v);
         if ("wave".equals(m)) return hsv(frac(t * 0.12f - x * 0.8f), 1f, v);
         return hsv(frac(t / 20f), 1f, v); // spectrum cycling, one loop every 20 s
+    }
+
+    /** fleet movement status background plus ability overlays for one LED */
+    private int statusPixel(float x, float y, float aspect, float t, long now) {
+        int c;
+        int move = LightState.move;
+        if (move == LightState.MOVE_SILENT) c = silent(x, y, t);
+        else if (move == LightState.MOVE_SUSTAINED) c = burn(x, y, t, false);
+        else if (move == LightState.MOVE_EMERGENCY) c = burn(x, y, t, true);
+        else c = normal(t);
+
+        // polar position around the middle of the device, 1 = farthest corner
+        float dx = (x - 0.5f) * aspect;
+        float dy = y - 0.5f;
+        float maxR = (float) Math.sqrt(aspect * aspect * 0.25f + 0.25f);
+        float dn = (float) Math.sqrt(dx * dx + dy * dy) / maxR;
+
+        // neutrino detector: breathing blue glow around the edge
+        if (LightState.neutrino) {
+            float e = Math.min(Math.min(x, 1f - x) * aspect, Math.min(y, 1f - y));
+            float breathe = 0.4f + 0.6f * (0.5f - 0.5f * (float) Math.cos(t * 2.1f));
+            c = lerp(c, NEUTRINO, (float) Math.exp(-e / 0.1f) * breathe);
+        }
+
+        // active sensor burst: gathering glow, then a white ring from the middle
+        float sc = LightState.sensorCharge;
+        if (sc > 0f) c = lerp(c, 0xFFFFFF, sc * 0.7f * (float) Math.exp(-(dn * dn) / (0.06f + 0.1f * sc)));
+        float se = (now - LightState.sensorAt) / 1000f;
+        if (LightState.sensorAt > 0L && 1.5f > se && se >= 0f) {
+            float ring = (dn - se * 1.05f) / 0.09f;
+            float v = (float) Math.exp(-ring * ring) * (1f - se / 1.5f);
+            if (0.08f > se) v = 1f;
+            c = lerp(c, 0xFFFFFF, v);
+        }
+
+        // interdiction pulse: the board dims and a ring closes in while it charges ... then it goes off
+        float pc = LightState.pulseCharge;
+        if (pc > 0f) {
+            c = scale(c, 1f - 0.6f * pc);
+            float r = 1f - pc;
+            float ring = (dn - r) / 0.08f;
+            float beat = 0.55f + 0.45f * (float) Math.sin(t * (6f + pc * 14f));
+            c = lerp(c, PULSE, (float) Math.exp(-ring * ring) * 0.95f * beat);
+            c = lerp(c, 0xFFFFFF, pc * pc * (float) Math.exp(-(dn * dn) / 0.01f));
+        }
+        float pe = (now - LightState.pulseAt) / 1000f;
+        if (LightState.pulseAt > 0L && 1.3f > pe && pe >= 0f) {
+            float fade = 1f - pe / 1.3f;
+            float ring = (dn - pe * 1.5f) / 0.16f;
+            float echo = (dn - (pe - 0.25f) * 1.5f) / 0.08f;
+            float v = (float) Math.exp(-ring * ring) * fade;
+            if (pe > 0.25f) v = Math.max(v, (float) Math.exp(-echo * echo) * fade * 0.5f);
+            if (0.12f > pe) v = Math.max(v, 1f - pe / 0.12f);
+            c = lerp(c, lerp(PULSE, 0xFFFFFF, v), v);
+        }
+
+        // transverse jump: purple tendrils close in on the middle
+        if (jumpLevel > 0.001f) {
+            float L = jumpLevel;
+            float th = (float) Math.atan2(dy, dx);
+            float arms = 0.5f + 0.5f * (float) Math.sin(th * 6f + dn * 9f - t * 2.6f);
+            float front = 1.05f - L * 1.1f;
+            float m = clamp01((dn - front + arms * 0.22f) / 0.1f);
+            int col = lerp(TENDRIL_DARK, TENDRIL, arms * (0.6f + 0.4f * (float) Math.sin(t * 4f + dn * 6f)));
+            float tip = (dn - front - arms * 0.05f) / 0.07f;
+            col = lerp(col, TENDRIL_TIP, (float) Math.exp(-tip * tip) * arms);
+            c = lerp(scale(c, 1f - 0.6f * L), col, m);
+        }
+        return c;
+    }
+
+    private void updateJump(float dt, long now) {
+        float ch = LightState.jumpCharge;
+        if (lastJumpCharge > 0.9f && 0f >= ch) jumpHoldUntil = now + 1500; // jump under way, wait for it
+        lastJumpCharge = ch;
+        long done = LightState.jumpDoneAt;
+        if (done != jumpDoneSeen) {
+            jumpDoneSeen = done;
+            jumpHoldUntil = 0L;
+            jumpFastUntil = now + 1500;
+        }
+        float target = ch > 0f ? ch : (jumpHoldUntil > now ? 1f : 0f);
+        float down = jumpFastUntil > now ? dt / 0.3f : dt / 1.0f;
+        jumpLevel = approach(jumpLevel, target, dt / 0.2f, down);
+    }
+
+    /** normal travel: almost-dark light blue breathing up to light blue */
+    private static int normal(float t) {
+        float b = 0.5f - 0.5f * (float) Math.cos(t * 1.4f);
+        return lerp(scale(Config.ready, 0.07f), scale(Config.ready, 0.6f), b);
+    }
+
+    /** running silent: really dim purple / dark purple vertical bands drifting sideways */
+    private static int silent(float x, float y, float t) {
+        float s = 0.5f + 0.5f * (float) Math.sin((x * 1.6f - t * 0.22f) * 6.2832f + 0.7f * (float) Math.sin(y * 3f + t * 0.8f));
+        return lerp(SILENT_DARK, SILENT_LIGHT, s);
+    }
+
+    /** sustained / emergency burn: streaming star field with a wobbling red line through the middle */
+    private static int burn(float x, float y, float t, boolean emergency) {
+        float k = emergency ? 2.6f : 1f;
+        int[] stars = emergency ? STARS_EMERGENCY : STARS_SUSTAINED;
+        int c = emergency ? 0x0C0000 : 0x180600;
+
+        // stars scroll sideways, like the burn drive streaking past them
+        int col = (int) Math.floor(x * 21f + t * 2.2f * k);
+        int row = Math.round(y * 5f);
+        int id = col * 7 + row * 1031;
+        float r = rand(id, 1);
+        if (r > 0.6f) {
+            float tw = 0.5f + 0.5f * (float) Math.sin(t * k * (1.5f + r * 3f) + r * 40f);
+            c = lerp(c, stars[(int) (rand(id, 2) * 3f)], tw * tw * (emergency ? 0.85f : 1f));
+        }
+
+        // the line
+        float yc = 0.5f + 0.14f * (float) Math.sin(x * 7f + t * 2.2f * k) + 0.05f * (float) Math.sin(x * 17f - t * 3.1f * k);
+        float dy = y - yc;
+        float halo = (float) Math.exp(-(dy * dy) / 0.04f);
+        float core = (float) Math.exp(-(dy * dy) / 0.006f);
+        c = lerp(c, emergency ? 0x8A1000 : 0xFF7A10, halo * 0.85f);
+        c = lerp(c, emergency ? 0xE00000 : 0xFF1A00, core);
+        return c;
     }
 
     // ------------------------------------------------------------------ combat

@@ -17,8 +17,25 @@ public class LightState {
 
     public static volatile int mode = IDLE;
 
+    /** fleet movement status, drives the campaign background */
+    public static final int MOVE_NORMAL = 0;
+    public static final int MOVE_SILENT = 1;     // Go Dark, or moving slowly
+    public static final int MOVE_SUSTAINED = 2;
+    public static final int MOVE_EMERGENCY = 3;
+
     // campaign
     public static volatile int[] slots = new int[10];
+    public static volatile int move = MOVE_NORMAL;
+    public static volatile boolean neutrino;
+    /** charge-up of a duration ability, 0 = not charging, 0..1 while it winds up */
+    public static volatile float sensorCharge;
+    public static volatile float pulseCharge;
+    public static volatile float jumpCharge;
+    /** System.currentTimeMillis() when the ability went off (0 = never) */
+    public static volatile long sensorAt;
+    public static volatile long pulseAt;
+    /** when a transverse jump actually moved the fleet */
+    public static volatile long jumpDoneAt;
 
     // combat
     public static volatile boolean hasShip;

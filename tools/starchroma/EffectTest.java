@@ -25,6 +25,7 @@ public class EffectTest {
         boolean live = args.length > 1 && "live".equals(args[1]);
 
         sheet(out);
+        campaignSheet(out);
         checks();
         if (failures > 0) {
             System.out.println(failures + " CHECK(S) FAILED");
@@ -96,6 +97,78 @@ public class EffectTest {
         int[][] f = null;
         for (long ms = 0; ms <= (long) (run * 1000f); ms += 40) f = r.render(t0 + ms);
         return f;
+    }
+
+    static void campaignSheet(File out) throws Exception {
+        String[] names = {
+            "normal (dim end of the breath)", "normal (bright end)", "running silent", "running silent +1.5 s",
+            "sustained burn", "sustained burn +0.4 s", "emergency burn", "emergency burn +0.2 s",
+            "neutrino detector", "sensor burst charging", "sensor burst ring 0.35 s", "sensor burst ring 0.8 s",
+            "interdiction charging 40%", "interdiction charging 95%", "interdiction fires 0.06 s", "interdiction pulse 0.5 s",
+            "transverse jump 40%", "transverse jump 100%", "jumped: receding 0.15 s", "jumped: receding 0.3 s"};
+        int cellW = 560, cellH = 190;
+        BufferedImage img = new BufferedImage(cellW * 2, cellH * ((names.length + 1) / 2), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(new Color(24, 24, 28));
+        g.fillRect(0, 0, img.getWidth(), img.getHeight());
+        for (int s = 0; s < names.length; s++) {
+            int[][] f = campaignScene(new Renderer(), s);
+            int ox = (s % 2) * cellW, oy = (s / 2) * cellH;
+            g.setColor(Color.WHITE);
+            g.drawString(names[s], ox + 12, oy + 18);
+            grid(g, f[Devices.KEYBOARD], 6, 22, ox + 12, oy + 28, 22, 2);
+        }
+        g.dispose();
+        File file = new File(out, "campaign.png");
+        ImageIO.write(img, "png", file);
+        System.out.println("wrote " + file);
+    }
+
+    static int[][] campaignScene(Renderer r, int s) {
+        long t0 = 3600000L * 10; // t = 0 in the renderer's clock
+        LightState.mode = LightState.CAMPAIGN;
+        LightState.slots = new int[] {1, 1, 2, 1, 1, 0, 0, 0, 0, 0};
+        LightState.move = LightState.MOVE_NORMAL;
+        LightState.neutrino = false;
+        LightState.sensorCharge = 0f;
+        LightState.pulseCharge = 0f;
+        LightState.jumpCharge = 0f;
+        LightState.sensorAt = 0L;
+        LightState.pulseAt = 0L;
+        LightState.jumpDoneAt = 0L;
+        switch (s) {
+            case 0: return r.render(t0);
+            case 1: return r.render(t0 + 2244);
+            case 2: LightState.move = LightState.MOVE_SILENT; return r.render(t0 + 5000);
+            case 3: LightState.move = LightState.MOVE_SILENT; return r.render(t0 + 6500);
+            case 4: LightState.move = LightState.MOVE_SUSTAINED; return r.render(t0 + 5000);
+            case 5: LightState.move = LightState.MOVE_SUSTAINED; return r.render(t0 + 5400);
+            case 6: LightState.move = LightState.MOVE_EMERGENCY; return r.render(t0 + 5000);
+            case 7: LightState.move = LightState.MOVE_EMERGENCY; return r.render(t0 + 5200);
+            case 8: LightState.neutrino = true; return r.render(t0 + 1500);
+            case 9: LightState.sensorCharge = 0.8f; return r.render(t0 + 1000);
+            case 10: LightState.sensorAt = t0 + 1000; return r.render(t0 + 1350);
+            case 11: LightState.sensorAt = t0 + 1000; return r.render(t0 + 1800);
+            case 12: LightState.pulseCharge = 0.4f; return r.render(t0 + 1000);
+            case 13: LightState.pulseCharge = 0.95f; return r.render(t0 + 1000);
+            case 14: LightState.pulseAt = t0 + 1000; return r.render(t0 + 1060);
+            case 15: LightState.pulseAt = t0 + 1000; return r.render(t0 + 1500);
+            default:
+                float charge = s == 16 ? 0.4f : 1f;
+                int[][] f = null;
+                long ms = 0;
+                for (; 1500 >= ms; ms += 40) {
+                    LightState.jumpCharge = Math.min(charge, ms / 1200f + 0.01f);
+                    f = r.render(t0 + ms);
+                }
+                if (s >= 18) {
+                    LightState.jumpCharge = 0f;
+                    LightState.jumpDoneAt = t0 + ms;
+                    long end = ms + (s == 18 ? 150 : 300);
+                    for (; end >= ms; ms += 40) f = r.render(t0 + ms);
+                }
+                return f;
+        }
     }
 
     static void draw(Graphics2D g, int[][] f, int x, int y) {
@@ -185,8 +258,38 @@ public class EffectTest {
         LightState.mode = LightState.CAMPAIGN;
         LightState.slots = new int[] {1, 1, 2, 1, 0, 0, 0, 0, 1, 2};
         ChromaEngine.start(log);
-        say("campaign: keys 1,2,4,9 light blue, 3 and 0 red, Tab/E/C/F/R/I light blue");
+        say("campaign: keys 1,2,4,9 light blue, 3 and 0 red, Tab/E/C/F/R/I light blue; normal travel breathing");
+        Thread.sleep(5000);
+        LightState.move = LightState.MOVE_SILENT;
+        say("running silent");
         Thread.sleep(4000);
+        LightState.move = LightState.MOVE_SUSTAINED;
+        say("sustained burn");
+        Thread.sleep(4000);
+        LightState.move = LightState.MOVE_EMERGENCY;
+        say("emergency burn");
+        Thread.sleep(4000);
+        LightState.move = LightState.MOVE_NORMAL;
+        LightState.neutrino = true;
+        say("neutrino detector");
+        Thread.sleep(4000);
+        LightState.neutrino = false;
+        say("active sensor burst");
+        for (int i = 1; i <= 20; i++) { LightState.sensorCharge = i / 20f; Thread.sleep(50); }
+        LightState.sensorCharge = 0f;
+        LightState.sensorAt = System.currentTimeMillis();
+        Thread.sleep(2000);
+        say("interdiction pulse");
+        for (int i = 1; i <= 40; i++) { LightState.pulseCharge = i / 40f; Thread.sleep(50); }
+        LightState.pulseCharge = 0f;
+        LightState.pulseAt = System.currentTimeMillis();
+        Thread.sleep(2000);
+        say("transverse jump");
+        for (int i = 1; i <= 50; i++) { LightState.jumpCharge = i / 50f; Thread.sleep(50); }
+        Thread.sleep(800);
+        LightState.jumpCharge = 0f;
+        LightState.jumpDoneAt = System.currentTimeMillis();
+        Thread.sleep(2000);
         LightState.slots = new int[] {1, 1, 1, 1, 0, 0, 0, 0, 1, 1};
         say("campaign: 3 and 0 ready again (white flash, then blue)");
         Thread.sleep(2500);

@@ -9,8 +9,8 @@ import com.fs.starfarer.api.Global;
 /** Options from data/config/settings.json (all optional). */
 public class Config {
 
-    /** campaign keyboard background: "spectrum" (Razer default cycling), "wave", or "static" */
-    public static String baseMode = "spectrum";
+    /** campaign keyboard background: "status" (follows fleet movement + abilities), "spectrum", "wave" or "static" */
+    public static String baseMode = "status";
     public static int baseColor = 0x00FF40;
     /** overall brightness multiplier 0..1 */
     public static float brightness = 1f;
@@ -35,7 +35,7 @@ public class Config {
         try { campaignAllDevices = Global.getSettings().getBoolean("starchroma_campaignAllDevices"); } catch (Throwable t) { }
         try { ready = rgb(Global.getSettings().getColor("starchroma_readyColor"), ready); } catch (Throwable t) { }
         try { used = rgb(Global.getSettings().getColor("starchroma_usedColor"), used); } catch (Throwable t) { }
-        if (baseMode == null) baseMode = "spectrum";
+        if (baseMode == null) baseMode = "status";
         log.info("Star Chroma: base=" + baseMode + " brightness=" + brightness + " campaignAllDevices=" + campaignAllDevices);
     }
 

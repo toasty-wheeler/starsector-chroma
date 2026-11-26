@@ -7,7 +7,17 @@ Razer Chroma lighting for Starsector 0.98a. The game talks to the Razer Chroma S
 ## What it does
 
 **Campaign**
-- Keyboard background: Razer-style spectrum cycling, dimmed so the game keys stand out (`spectrum`, `wave` or `static` in settings).
+- The keyboard background follows your fleet's movement status:
+  - **Normal travel**: almost-dark light blue slowly breathing up to light blue.
+  - **Running silent** (Go Dark, or moving slowly): a very dim purple / dark purple wave.
+  - **Sustained Burn**: an orange, red and yellow star field streaming past, with a wobbling red line through the middle haloed in orange.
+  - **Emergency Burn**: the same, darker, redder and much faster.
+- Abilities add their own effects on top:
+  - **Neutrino Detector**: a breathing blue glow around the edge of the keyboard.
+  - **Active Sensor Burst**: light gathers in the middle while it charges, then a white ring expands outward.
+  - **Interdiction Pulse**: the keyboard dims and a ring closes in, ticking faster as it charges, then a bright pulse and an echo blast outward.
+  - **Transverse Jump**: purple and dark purple tendrils close in on the middle while it charges, and snap back once the jump goes through.
+- Set `starchroma_baseMode` to `spectrum`, `wave` or `static` for a fixed background instead.
 - Keys **1–0** match the ability bar: light blue = ready, red (slow pulse) = active, cooling down or not usable right now. Each key flashes white when its ability is ready again. Empty slots show the background.
 - **Tab** (map), **E** (intel), **C**, **F**, **R**, **I** glow light blue.
 - Mouse, headset, mousepad etc. keep your own Synapse lighting (set `starchroma_campaignAllDevices` to `true` to light them too).
@@ -28,9 +38,9 @@ On the title screen and when you quit, the mod releases Chroma and your normal S
 
 | key | default | |
 |---|---|---|
-| `starchroma_baseMode` | `spectrum` | campaign keyboard background: `spectrum`, `wave`, `static` |
+| `starchroma_baseMode` | `status` | campaign keyboard background: `status` (movement + abilities), or fixed `spectrum`, `wave`, `static` |
 | `starchroma_baseColor` | `[0,255,64,255]` | colour for `static` |
-| `starchroma_baseBrightness` | `0.4` | background brightness |
+| `starchroma_baseBrightness` | `0.4` | brightness of the fixed backgrounds |
 | `starchroma_brightness` | `1.0` | overall brightness |
 | `starchroma_campaignAllDevices` | `false` | also drive non-keyboard devices in the campaign |
 | `starchroma_readyColor` / `starchroma_usedColor` | light blue / red | ability key colours |
