@@ -1,3 +1,5 @@
+<p align="center"><img src="icon.png" width="160" alt="Star Chroma icon"></p>
+
 # Star Chroma
 
 Razer Chroma lighting for Starsector 0.98a. The game talks to the Razer Chroma SDK that Razer Synapse / the Razer Chroma app runs on your PC (`localhost:54235`), so there's nothing extra to install.

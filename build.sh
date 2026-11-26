@@ -30,7 +30,7 @@ if [ "$MODE" = "install" ]; then
     # overwrite in place (never delete the folder first: a running game locks the jar)
     mkdir -p "$DEST/jars"
     rm -rf "$DEST/src" "$DEST/data"
-    cp -r "$ROOT/mod_info.json" "$ROOT/README.md" "$ROOT/data" "$ROOT/src" "$DEST/"
+    cp -r "$ROOT/mod_info.json" "$ROOT/README.md" "$ROOT/icon.png" "$ROOT/data" "$ROOT/src" "$DEST/"
     if cp -f "$ROOT/jars/StarChroma.jar" "$DEST/jars/" 2>/dev/null; then
         echo "installed to $DEST"
     else
