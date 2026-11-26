@@ -21,14 +21,14 @@ public class ChromaEngine extends Thread {
     private long sessionReadyAt;    // Chroma ignores effects for a moment after init
     private long lastBeat;
     private long retryAt;
-    private boolean warned;
+    private int failures;
     private boolean wasDead;
 
     private ChromaEngine(Logger log) {
         super("StarChroma lighting");
         this.log = log;
         setDaemon(true);
-        setPriority(Thread.MIN_PRIORITY + 1);
+
     }
 
     public static synchronized void start(Logger log) {
@@ -80,13 +80,14 @@ public class ChromaEngine extends Thread {
             if (retryAt > now) return;
             if (!client.open()) {
                 retryAt = now + 5000;
-                if (!warned) {
-                    log.info("Star Chroma: Razer Chroma SDK not reachable on localhost:54235, will keep retrying");
-                    warned = true;
+                if (5 > failures) {
+                    failures++;
+                    log.info("Star Chroma: could not register with Razer Chroma (" + ChromaClient.lastError + "), retrying in 5 s");
+                    if (failures == 5) log.info("Star Chroma: still retrying, not logging further failures");
                 }
                 return;
             }
-            warned = false;
+            failures = 0;
             log.info("Star Chroma: Chroma session opened");
             sessionReadyAt = now + 1200;
             lastBeat = now;
@@ -127,7 +128,7 @@ public class ChromaEngine extends Thread {
     }
 
     private void lostConnection(long now) {
-        log.info("Star Chroma: lost the Chroma session, reconnecting");
+        log.info("Star Chroma: lost the Chroma session (" + ChromaClient.lastError + "), reconnecting");
         client.close();
         sessionMode = -1;
         retryAt = now + 3000;

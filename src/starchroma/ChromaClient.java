@@ -16,6 +16,9 @@ public class ChromaClient {
 
     private String uri;
 
+    /** why the last request failed (for the log) */
+    public static volatile String lastError;
+
     public boolean isOpen() {
         return uri != null;
     }
@@ -27,10 +30,13 @@ public class ChromaClient {
             + "\"author\":{\"name\":\"toasty-wheeler\",\"contact\":\"https://github.com/toasty-wheeler\"},"
             + "\"device_supported\":[\"keyboard\",\"mouse\",\"headset\",\"mousepad\",\"keypad\",\"chromalink\"],"
             + "\"category\":\"game\"}";
-        String res = request("POST", ROOT, body, 2000);
+        String res = request("POST", ROOT, body, 6000);
         if (res == null) return false;
         String u = jsonString(res, "uri");
-        if (u == null) return false;
+        if (u == null) {
+            lastError = "unexpected reply: " + res;
+            return false;
+        }
         uri = u;
         return true;
     }
@@ -86,7 +92,8 @@ public class ChromaClient {
     static String request(String method, String url, String body, int timeout) {
         HttpURLConnection con = null;
         try {
-            con = (HttpURLConnection) new URL(url).openConnection();
+            // never through a proxy: Chroma is on this PC
+            con = (HttpURLConnection) new URL(url).openConnection(java.net.Proxy.NO_PROXY);
             con.setRequestMethod(method);
             con.setConnectTimeout(timeout);
             con.setReadTimeout(timeout);
@@ -112,9 +119,13 @@ public class ChromaClient {
                 while ((n = in.read(tmp)) > 0) buf.write(tmp, 0, n);
                 in.close();
             }
-            if (code >= 400) return null;
+            if (code >= 400) {
+                lastError = method + " " + url + " -> HTTP " + code + " " + new String(buf.toByteArray(), "UTF-8");
+                return null;
+            }
             return new String(buf.toByteArray(), "UTF-8");
         } catch (Throwable t) {
+            lastError = method + " " + url + " -> " + t;
             return null;
         }
     }
