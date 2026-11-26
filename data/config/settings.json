@@ -1,0 +1,18 @@
+{
+	"plugins":{
+		"starchroma_combat":"starchroma.ChromaCombatPlugin",
+	},
+
+	# Star Chroma options
+	# campaign keyboard background: "spectrum" (Razer default colour cycling), "wave", or "static"
+	"starchroma_baseMode":"spectrum",
+	"starchroma_baseColor":[0,255,64,255],
+	# campaign keyboard background brightness 0..1 (low, so the highlighted keys stand out)
+	"starchroma_baseBrightness":0.4,
+	# overall brightness 0..1
+	"starchroma_brightness":1.0,
+	# false: in the campaign only the keyboard is lit by the game, other devices keep your Synapse lighting
+	"starchroma_campaignAllDevices":false,
+	"starchroma_readyColor":[85,200,255,255],
+	"starchroma_usedColor":[255,20,8,255],
+}
