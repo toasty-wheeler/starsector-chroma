@@ -6,6 +6,9 @@ import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.GameState;
 import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.campaign.CampaignFleetAPI;
+import com.fs.starfarer.api.campaign.CargoAPI;
+import com.fs.starfarer.api.fleet.FleetLogisticsAPI;
+import com.fs.starfarer.api.fleet.FleetMemberAPI;
 import com.fs.starfarer.api.campaign.LocationAPI;
 import com.fs.starfarer.api.campaign.PersistentUIDataAPI.AbilitySlotAPI;
 import com.fs.starfarer.api.campaign.PersistentUIDataAPI.AbilitySlotsAPI;
@@ -45,7 +48,9 @@ public class CampaignWatcher implements EveryFrameScript {
         int move = LightState.MOVE_NORMAL;
         if (busy(fleet.getAbility("emergency_burn"))) move = LightState.MOVE_EMERGENCY;
         else if (on(fleet.getAbility("sustained_burn"))) move = LightState.MOVE_SUSTAINED;
-        else if (on(fleet.getAbility("go_dark")) || fleet.wasSlowMoving()) move = LightState.MOVE_SILENT;
+        else if (on(fleet.getAbility("go_dark"))) move = LightState.MOVE_SILENT;
+        LightState.slowMoving = fleet.wasSlowMoving();
+        LightState.burnLevel = Math.max(0f, Math.min(1f, fleet.getCurrBurnLevel() / 20f));
         LightState.move = move;
 
         LightState.neutrino = on(fleet.getAbility("gravitic_scan"));
@@ -84,6 +89,35 @@ public class CampaignWatcher implements EveryFrameScript {
             jumpSeenAt = 0L;
         }
         if (loc != null) lastLocation = loc;
+
+        readLogistics(fleet);
+    }
+
+    /** supplies, fuel, fleet readiness and hull for the numpad, nav keys and low-stock alarms */
+    private static void readLogistics(CampaignFleetAPI fleet) {
+        CargoAPI cargo = fleet.getCargo();
+        if (cargo != null) {
+            float cap = cargo.getMaxCapacity();
+            float maxFuel = cargo.getMaxFuel();
+            LightState.supplies = cap > 0f ? Math.min(1f, cargo.getSupplies() / cap) : -1f;
+            LightState.fuel = maxFuel > 0f ? Math.min(1f, cargo.getFuel() / maxFuel) : -1f;
+            FleetLogisticsAPI log = fleet.getLogistics();
+            float perDay = log != null ? log.getTotalSuppliesPerDay() : 0f;
+            LightState.supplyDays = perDay > 0f ? cargo.getSupplies() / perDay : -1f;
+        }
+        List members = fleet.getFleetData() != null ? fleet.getFleetData().getMembersListCopy() : null;
+        if (members == null || members.isEmpty()) return;
+        float cr = 0f, hull = 0f;
+        int n = 0;
+        for (int i = 0; i < members.size(); i++) {
+            FleetMemberAPI m = (FleetMemberAPI) members.get(i);
+            if (m == null || m.isMothballed()) continue;
+            cr += m.getRepairTracker().getCR();
+            hull += m.getStatus().getHullFraction();
+            n++;
+        }
+        LightState.fleetCR = n > 0 ? cr / n : -1f;
+        LightState.fleetHull = n > 0 ? hull / n : -1f;
     }
 
     private static boolean on(AbilityPlugin ab) {
@@ -127,6 +161,11 @@ public class CampaignWatcher implements EveryFrameScript {
             if (id == null) continue;
             AbilityPlugin ab = fleet.getAbility(id);
             if (ab == null) continue;
+            // toggles report isActive() while switched on; duration abilities only "in progress"
+            if (ab.isActive()) {
+                out[key] = LightState.SLOT_ACTIVE;
+                continue;
+            }
             boolean busy = ab.isActiveOrInProgress() || ab.isOnCooldown() || !ab.isUsable();
             out[key] = busy ? LightState.SLOT_USED : LightState.SLOT_READY;
         }

@@ -25,18 +25,24 @@ Rendered by `sh build.sh test` (keyboard, mouse, keypad, mousepad, headset, Chro
 **Campaign**
 - The keyboard background follows your fleet's movement status:
   - **Normal travel**: almost-dark light blue slowly breathing up to light blue.
-  - **Running silent** (Go Dark, or moving slowly): a very dim purple / dark purple wave.
+  - **Running silent** (Go Dark): a very dim purple / dark purple wave.
   - **Sustained Burn**: an orange, red and yellow star field streaming past, with a wobbling red line through the middle haloed in orange.
   - **Emergency Burn**: the same, darker, redder and much faster.
+  - Both follow your burn level: at a standstill they look like normal travel, and as the fleet speeds up the burn effect fades in and its star field moves faster, reaching full strength and speed at burn 20.
 - Abilities add their own effects on top:
-  - **Neutrino Detector**: a breathing blue glow around the edge of the keyboard.
+  - **Neutrino Detector**: a steady blue outline around the keyboard that weaves in and out (reaching about a row deeper at its crests), while the middle goes dark with stars slowly twinkling on random keys.
+  - **Holding S** (moving slowly): small red ripples spread out from the S key.
   - **Active Sensor Burst**: light gathers in the middle while it charges, then a white ring expands outward.
   - **Interdiction Pulse**: the keyboard dims and a ring closes in, ticking faster as it charges, then a bright pulse and an echo blast outward.
   - **Transverse Jump**: purple and dark purple tendrils close in on the middle while it charges, and snap back once the jump goes through.
 - Set `starchroma_baseMode` to `spectrum`, `wave` or `static` for a fixed background instead.
-- Keys **1–0** match the ability bar: light blue = ready, red (slow pulse) = active, cooling down or not usable right now. Each key flashes white when its ability is ready again. Empty slots show the background.
+- Keys **1–0** match the ability bar: light blue = ready, yellow slowly cycling to white-yellow = a toggle that is switched on (Transponder, Neutrino Detector, Go Dark, Sustained Burn...), red (slow pulse) = charging, cooling down or not usable right now. Each key flashes white when its ability is ready again. Empty slots show the background.
 - **Tab** (map), **E** (intel), **C**, **D**, **F**, **R**, **I**, **F2** (codex), **F4** (quicksave) and **F5** (quickload) glow light blue.
-- Mouse, headset, mousepad etc. keep your own Synapse lighting (set `starchroma_campaignAllDevices` to `true` to light them too).
+- Numpad (full-size keyboards): three bars filling from the bottom: **supplies** (green, share of cargo capacity), **fuel** (orange, share of the tank) and fleet **readiness** (light blue, average CR). A bar pulses red under 20%.
+- Insert / Home / Page Up / Page Down / End / Delete show the fleet's average hull: they go dark one by one clockwise from Insert as hull drops; light blue, yellow under 50%, red under 30%.
+- The whole background flashes yellow with less than a week of supplies, red with less than 20% fuel, and alternates red and yellow when both are low.
+- Mouse: the left side strip shows supplies (green) and the right side fuel (orange), filling from the bottom and pulsing red under 20%. The wheel and logo blink yellow with under a week of supplies, red under 20% fuel, and alternate red / yellow when both are low (`starchroma_campaignMouse`: `false` leaves the mouse on your Synapse lighting).
+- Headset, mousepad etc. keep your own Synapse lighting (set `starchroma_campaignAllDevices` to `true` to light them too).
 
 **Combat** (every Chroma device)
 - Everything turns light white.
@@ -69,7 +75,9 @@ On the title screen and when you quit, the mod releases Chroma and your normal S
 | `starchroma_baseBrightness` | `0.4` | brightness of the fixed backgrounds |
 | `starchroma_brightness` | `1.0` | overall brightness |
 | `starchroma_campaignAllDevices` | `false` | also drive non-keyboard devices in the campaign |
+| `starchroma_campaignMouse` | `true` | campaign mouse shows supplies / fuel and blinks on low stock |
 | `starchroma_readyColor` / `starchroma_usedColor` | light blue / red | ability key colours |
+| `starchroma_frameMs` | `66` | time between lighting frames (66 = 15 fps). Raise it (80-100) if animations stutter and then rush to catch up; lower it if your setup keeps up |
 
 Hotkey colours assume the default key bindings.
 

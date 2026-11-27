@@ -18,6 +18,10 @@ public class Config {
     public static float baseBrightness = 0.4f;
     /** false = in the campaign only the keyboard is driven; mouse, headset etc. keep your own Synapse lighting */
     public static boolean campaignAllDevices = false;
+    /** campaign: also drive the mouse (supplies / fuel side bars, warning blinks on wheel and logo) */
+    public static boolean campaignMouse = true;
+    /** milliseconds between frames sent to Chroma (66 = 15 fps; Synapse can fall behind and then rush at 25+ fps) */
+    public static int frameMs = 66;
 
     public static int ready = 0x55C8FF;    // light blue
     public static int used = 0xFF1408;     // red
@@ -33,10 +37,12 @@ public class Config {
         try { brightness = clamp(Global.getSettings().getFloat("starchroma_brightness")); } catch (Throwable t) { }
         try { baseBrightness = clamp(Global.getSettings().getFloat("starchroma_baseBrightness")); } catch (Throwable t) { }
         try { campaignAllDevices = Global.getSettings().getBoolean("starchroma_campaignAllDevices"); } catch (Throwable t) { }
+        try { campaignMouse = Global.getSettings().getBoolean("starchroma_campaignMouse"); } catch (Throwable t) { }
+        try { frameMs = Math.max(33, Math.min(200, Global.getSettings().getInt("starchroma_frameMs"))); } catch (Throwable t) { }
         try { ready = rgb(Global.getSettings().getColor("starchroma_readyColor"), ready); } catch (Throwable t) { }
         try { used = rgb(Global.getSettings().getColor("starchroma_usedColor"), used); } catch (Throwable t) { }
         if (baseMode == null) baseMode = "status";
-        log.info("Star Chroma: base=" + baseMode + " brightness=" + brightness + " campaignAllDevices=" + campaignAllDevices);
+        log.info("Star Chroma: base=" + baseMode + " brightness=" + brightness + " campaignAllDevices=" + campaignAllDevices + " frameMs=" + frameMs);
     }
 
     private static int rgb(Color c, int fallback) {

@@ -18,6 +18,7 @@ public class Renderer {
     private float hitFlash;
     private boolean hadShip;
     private long lastMs;
+    private double animClock;
     private int[] lastSlots = new int[10];
     private final float[] readyFlash = new float[10];
 
@@ -39,8 +40,13 @@ public class Renderer {
         float dt = lastMs == 0L ? 0f : (nowMs - lastMs) / 1000f;
         if (dt > 0.25f) dt = 0.25f;
         if (0f > dt) dt = 0f;
+        // animation clock: advances at most 0.1 s per frame, so after a hitch (game loading,
+        // Synapse busy) the breathing etc. carries on from where it was instead of jumping ahead
+        if (lastMs == 0L) animClock = (nowMs % 3600000L) / 1000.0;
+        else animClock += Math.min(dt, 0.1f);
+        if (animClock >= 3600.0) animClock -= 3600.0;
         lastMs = nowMs;
-        float t = (nowMs % 3600000L) / 1000f;
+        float t = (float) animClock;
 
         int mode = LightState.mode;
         if (mode == LightState.COMBAT) renderCombat(t, dt, nowMs);
@@ -59,7 +65,15 @@ public class Renderer {
 
     // background colours
     static final int SILENT_DARK = 0x0E0318, SILENT_LIGHT = 0x2C0E50;
-    static final int NEUTRINO = 0x2E7BFF;
+    static final int NEUTRINO = 0x2E7BFF, NEUTRINO_LIGHT = 0x7FD0FF, STAR_BLUE = 0x9FC8FF;
+    static final int SLOW_RIPPLE = 0xFF1A08;
+    public static final int TOGGLE_ON = 0xFFC000, TOGGLE_ON_LIGHT = 0xFFF0A0;
+    public static final int ALERT_YELLOW = 0xFFC800, ALERT_RED = 0xFF1000;
+    public static final int SUPPLY_COL = 0x60FF40, FUEL_COL = 0xFF9A1A;
+
+    private float neutrinoLevel;
+    private float burnSpeed;
+    private double burnClock;
     static final int PULSE = 0x9FDCFF;
     static final int TENDRIL_DARK = 0x22073F, TENDRIL = 0x8E34F0, TENDRIL_TIP = 0xE0B0FF;
     static final int[] STARS_SUSTAINED = {0xFFD040, 0xFF8A20, 0xFF3A10};
@@ -75,6 +89,13 @@ public class Renderer {
     private void renderCampaign(float t, float dt, long now) {
         boolean status = "status".equals(Config.baseMode);
         if (status) updateJump(dt, now);
+        neutrinoLevel = approach(neutrinoLevel, LightState.neutrino ? 1f : 0f, dt / 0.8f, dt / 0.8f);
+        // burn animation: blends in and speeds up with the fleet's burn level (full at burn 20); its own
+        // clock so a speed change never makes the star field jump
+        boolean burning = LightState.move == LightState.MOVE_SUSTAINED || LightState.move == LightState.MOVE_EMERGENCY;
+        burnSpeed = approach(burnSpeed, burning ? clamp01(LightState.burnLevel) : 0f, dt / 0.6f, dt / 0.6f);
+        burnClock += Math.min(dt, 0.1f) * burnSpeed;
+        if (burnClock >= 3600.0) burnClock -= 3600.0;
 
         for (int d = 0; d < Devices.COUNT; d++) {
             int[] a = frame[d];
@@ -86,7 +107,10 @@ public class Renderer {
                 else a[i] = base(xs[i], t);
             }
         }
+        lowStockFlash(t);
+        mouseCampaign(t);
         int[] kb = frame[Devices.KEYBOARD];
+        logistics(kb, t);
 
         int[] slots = LightState.slots;
         for (int s = 0; s < 10; s++) {
@@ -98,12 +122,95 @@ public class Renderer {
                 kb[idx] = lerp(Config.ready, 0xFFFFFF, readyFlash[s]);
             } else if (st == LightState.SLOT_USED) {
                 kb[idx] = scale(Config.used, 0.85f + 0.15f * (float) Math.sin(t * 5f));
+            } else if (st == LightState.SLOT_ACTIVE) {
+                // switched-on toggle: slow cycle between yellow and white-yellow (about 4 s)
+                kb[idx] = lerp(TOGGLE_ON, TOGGLE_ON_LIGHT, 0.5f - 0.5f * (float) Math.cos(t * 1.6f));
             }
         }
         lastSlots = slots;
 
         for (int k = 0; k < Devices.KEY_SCREENS.length; k++) {
             kb[Devices.keyIndex(Devices.KEY_SCREENS[k])] = Config.ready;
+        }
+    }
+
+    /**
+     * low stock: the background flashes yellow with under a week of supplies, red under 20% fuel,
+     * and alternates red / yellow flashes when both are low. One flash every 1.6 s.
+     */
+    private void lowStockFlash(float t) {
+        float days = LightState.supplyDays, fuel = LightState.fuel;
+        boolean lowSup = days >= 0f && 7f > days;
+        boolean lowFuel = fuel >= 0f && 0.2f > fuel;
+        if (!lowSup && !lowFuel) return;
+        float cyc = t / 1.6f;
+        int n = (int) Math.floor(cyc);
+        float s = (float) Math.sin((cyc - n) * Math.PI);
+        float pulse = s * s * 0.8f;
+        int col = lowSup && lowFuel ? ((n & 1) == 0 ? ALERT_RED : ALERT_YELLOW) : (lowFuel ? ALERT_RED : ALERT_YELLOW);
+        for (int d = 0; d < Devices.COUNT; d++) {
+            int[] a = frame[d];
+            for (int i = 0; i < a.length; i++) a[i] = lerp(a[i], col, pulse);
+        }
+    }
+
+    /**
+     * campaign mouse: left side = supplies, right side = fuel (filling from the bottom, red pulse
+     * under 20%); wheel and logo blink yellow (under a week of supplies), red (under 20% fuel),
+     * or alternate red / yellow when both are low
+     */
+    private void mouseCampaign(float t) {
+        int[] m = frame[Devices.MOUSE];
+        sideBar(m, 0, LightState.supplies, SUPPLY_COL, t);
+        sideBar(m, 6, LightState.fuel, FUEL_COL, t);
+        float days = LightState.supplyDays, fuel = LightState.fuel;
+        boolean lowSup = days >= 0f && 7f > days;
+        boolean lowFuel = fuel >= 0f && 0.2f > fuel;
+        if (!lowSup && !lowFuel) return;
+        float cyc = t / 0.8f;               // a blink every 0.8 s, sharper than the background flash
+        int n = (int) Math.floor(cyc);
+        boolean on = 0.55f > cyc - n;
+        int col = lowSup && lowFuel ? ((n & 1) == 0 ? ALERT_RED : ALERT_YELLOW) : (lowFuel ? ALERT_RED : ALERT_YELLOW);
+        int c = on ? col : 0;
+        m[MOUSE_WHEEL] = c;
+        m[MOUSE_LOGO] = c;
+    }
+
+    /** a mouse side strip (column 0 or 6, rows 1..7) filled from the bottom; pulses red under 20% */
+    private void sideBar(int[] m, int col, float v, int color, float t) {
+        if (0f > v) return;
+        if (0.2f > v) color = scale(Config.used, 0.7f + 0.3f * (float) Math.sin(t * 5f));
+        for (int k = 0; 7 > k; k++) {
+            float fill = clamp01(v * 7f - k);
+            m[(7 - k) * 7 + col] = lerp(0x080808, color, fill);
+        }
+    }
+
+    /** numpad bars (supplies, fuel, fleet readiness) and the nav-key ring for fleet hull */
+    private void logistics(int[] kb, float t) {
+        bar(kb, NUMPAD_AMMO, LightState.supplies, SUPPLY_COL, t);
+        bar(kb, NUMPAD_AMMO + 1, LightState.fuel, FUEL_COL, t);
+        bar(kb, NUMPAD_AMMO + 2, LightState.fleetCR, Config.ready, t);
+
+        float hull = LightState.fleetHull;
+        if (hull >= 0f) {
+            int col = 0.3f > hull ? Config.used : (0.5f > hull ? ALERT_YELLOW : Config.ready);
+            int[] ring = Devices.KEY_NAV_CLOCKWISE;
+            for (int j = 0; j < ring.length; j++) {
+                // keys go dark one by one, clockwise from Insert, as the fleet's hull drops
+                float on = clamp01(hull * ring.length - (ring.length - 1 - j));
+                kb[Devices.keyIndex(ring[j])] = lerp(0x080808, col, on);
+            }
+        }
+    }
+
+    /** one numpad column (rows 1..5) filled from the bottom; pulses red under 20% */
+    private void bar(int[] kb, int col, float v, int color, float t) {
+        if (0f > v) return;
+        if (0.2f > v) color = scale(Config.used, 0.7f + 0.3f * (float) Math.sin(t * 5f));
+        for (int k = 0; NUMPAD_ROWS > k; k++) {
+            float fill = clamp01(v * NUMPAD_ROWS - k);
+            kb[(NUMPAD_TOP + NUMPAD_ROWS - 1 - k) * 22 + col] = lerp(0x080808, color, fill);
         }
     }
 
@@ -121,8 +228,8 @@ public class Renderer {
         int c;
         int move = LightState.move;
         if (move == LightState.MOVE_SILENT) c = silent(x, y, t);
-        else if (move == LightState.MOVE_SUSTAINED) c = burn(x, y, t, false);
-        else if (move == LightState.MOVE_EMERGENCY) c = burn(x, y, t, true);
+        else if (move == LightState.MOVE_SUSTAINED) c = lerp(normal(t), burn(x, y, (float) burnClock, false), burnSpeed);
+        else if (move == LightState.MOVE_EMERGENCY) c = lerp(normal(t), burn(x, y, (float) burnClock, true), burnSpeed);
         else c = normal(t);
 
         // polar position around the middle of the device, 1 = farthest corner
@@ -131,11 +238,43 @@ public class Renderer {
         float maxR = (float) Math.sqrt(aspect * aspect * 0.25f + 0.25f);
         float dn = (float) Math.sqrt(dx * dx + dy * dy) / maxR;
 
-        // neutrino detector: breathing blue glow around the edge
-        if (LightState.neutrino) {
+        // neutrino detector: a blue glow around the edge that weaves in and out (reaching about a
+        // row deeper at its crests) and breathes in step with the normal background, which is
+        // dimmed underneath so the two blues don't fight. Fades in/out instead of popping.
+        if (neutrinoLevel > 0.001f) {
             float e = Math.min(Math.min(x, 1f - x) * aspect, Math.min(y, 1f - y));
-            float breathe = 0.4f + 0.6f * (0.5f - 0.5f * (float) Math.cos(t * 2.1f));
-            c = lerp(c, NEUTRINO, (float) Math.exp(-e / 0.1f) * breathe);
+            float th = (float) Math.atan2(dy, dx);
+            float weave = 0.5f + 0.5f * (float) (Math.sin(th * 5f - t * 1.1f) * Math.cos(th * 3f + t * 0.7f));
+            float depth = 0.12f + 0.12f * weave;
+            float g = (float) Math.exp(-e / depth);
+            // the middle goes dark, with stars slowly twinkling in and out on random keys
+            int inner = scale(c, 0.06f);
+            int id = (int) (x * 211f) * 131 + (int) (y * 97f) * 7;
+            float phase = t * (0.25f + 0.35f * rand(id, 3)) + rand(id, 4) * 7f;
+            int n = (int) Math.floor(phase);
+            if (rand(id, n + 17) > 0.72f) {
+                float s = (float) Math.sin(frac(phase) * Math.PI);
+                inner = lerp(inner, lerp(STAR_BLUE, 0xFFFFFF, rand(id, n + 29)), s * s);
+            }
+            c = lerp(c, inner, neutrinoLevel * (1f - g));
+            // the outline stays fully lit; only its depth weaves
+            int col = lerp(NEUTRINO, NEUTRINO_LIGHT, weave * g);
+            c = lerp(c, col, g * neutrinoLevel);
+        }
+
+        // holding S (moving slowly): small red ripples spreading from the S key
+        if (LightState.slowMoving && aspect == Devices.ASPECT[Devices.KEYBOARD]) {
+            float sx = (Devices.keyCol(Devices.KEY_S) / 21f - 0.5f) * aspect;
+            float sy = 1f - Devices.keyRow(Devices.KEY_S) / 5f - 0.5f;
+            float rx = dx - sx, ry = dy - sy;
+            float dist = (float) Math.sqrt(rx * rx + ry * ry);
+            float v = 0f;
+            for (int k = 0; 2 > k; k++) {
+                float age = frac(t / 1.4f + k * 0.5f);     // a new ripple every 0.7 s
+                float ring = (dist - age * 0.8f) / 0.13f;
+                v = Math.max(v, (float) Math.exp(-ring * ring) * (1f - age));
+            }
+            c = lerp(c, SLOW_RIPPLE, Math.min(1f, v * 1.5f));
         }
 
         // active sensor burst: gathering glow, then a white ring from the middle
@@ -203,7 +342,7 @@ public class Renderer {
     /** normal travel: almost-dark light blue breathing up to light blue */
     private static int normal(float t) {
         float b = 0.5f - 0.5f * (float) Math.cos(t * 1.4f);
-        return lerp(scale(Config.ready, 0.07f), scale(Config.ready, 0.6f), b);
+        return lerp(scale(Config.ready, 0.12f), scale(Config.ready, 0.6f), b);
     }
 
     /** running silent: really dim purple / dark purple vertical bands drifting sideways */
@@ -626,7 +765,7 @@ public class Renderer {
         return (h & 0xFFFFFF) / 16777216f;
     }
 
-    static int lerp(int a, int b, float t) {
+    public static int lerp(int a, int b, float t) {
         t = clamp01(t);
         int r = (int) (((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t);
         int g = (int) (((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * t);
@@ -634,7 +773,7 @@ public class Renderer {
         return (r << 16) | (g << 8) | bl;
     }
 
-    static int scale(int c, float f) {
+    public static int scale(int c, float f) {
         f = clamp01(f);
         int r = (int) (((c >> 16) & 255) * f);
         int g = (int) (((c >> 8) & 255) * f);

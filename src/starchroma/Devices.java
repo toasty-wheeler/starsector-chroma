@@ -35,10 +35,13 @@ public class Devices {
     public static final int KEY_I = 0x0209;
     public static final int KEY_F = 0x0305;
     public static final int KEY_C = 0x0404;
-    public static final int KEY_D = 0x0303;
+    public static final int KEY_S = 0x0303;
+    public static final int KEY_D = 0x0304;
     public static final int KEY_F2 = 0x0004;
     public static final int KEY_F4 = 0x0006;
     public static final int KEY_F5 = 0x0007;
+    /** Insert, Home, Page Up, Page Down, End, Delete: the 2x3 nav block in clockwise order */
+    public static final int[] KEY_NAV_CLOCKWISE = {0x010F, 0x0110, 0x0111, 0x0211, 0x0210, 0x020F};
     /** keys 1, 2, ... 9, 0 in ability-bar order */
     public static final int[] KEY_DIGITS = {0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0109, 0x010A, 0x010B};
     /** campaign hotkeys: Tab map, E intel, C character, F fleet, R refit, I cargo, D, F2 codex, F4 quicksave, F5 quickload */
@@ -76,6 +79,14 @@ public class Devices {
 
     public static int size(int d) {
         return ROWS[d] > 0 ? ROWS[d] * COLS[d] : COLS[d];
+    }
+
+    public static int keyRow(int key) {
+        return key >> 8;
+    }
+
+    public static int keyCol(int key) {
+        return key & 0xFF;
     }
 
     /** index into the keyboard array for an RZKEY code */

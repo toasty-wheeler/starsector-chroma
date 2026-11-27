@@ -103,10 +103,13 @@ public class EffectTest {
     static void campaignSheet(File out) throws Exception {
         String[] names = {
             "normal (dim end of the breath)", "normal (bright end)", "running silent", "running silent +1.5 s",
-            "sustained burn", "sustained burn +0.4 s", "emergency burn", "emergency burn +0.2 s",
+            "sustained burn (burn 20)", "sustained burn +0.4 s", "emergency burn (burn 20)", "emergency burn at burn 10 (half)",
             "neutrino detector", "sensor burst charging", "sensor burst ring 0.35 s", "sensor burst ring 0.8 s",
             "interdiction charging 40%", "interdiction charging 95%", "interdiction fires 0.06 s", "interdiction pulse 0.5 s",
-            "transverse jump 40%", "transverse jump 100%", "jumped: receding 0.15 s", "jumped: receding 0.3 s"};
+            "transverse jump 40%", "transverse jump 100%", "jumped: receding 0.15 s", "jumped: receding 0.3 s",
+            "neutrino 2.2 s (bright breath)", "keys 2+4 toggled on (yellow); numpad + nav full", "fleet hull 45%: nav yellow", "fleet hull 20%: nav red, supplies 10%",
+            "under a week of supplies: yellow flash", "fuel under 20%: red flash", "both low: alternating (yellow beat)", "both low: alternating (red beat)",
+            "holding S: red ripples", "neutrino +3 s (other stars)"};
         int cellW = 560, cellH = 190;
         BufferedImage img = new BufferedImage(cellW * 2, cellH * ((names.length + 1) / 2), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();
@@ -125,28 +128,58 @@ public class EffectTest {
         System.out.println("wrote " + file);
     }
 
+    static int[][] run(Renderer r, long t0, long until) {
+        int[][] f = null;
+        for (long ms = 0; until >= ms; ms += 40) f = r.render(t0 + ms);
+        return f;
+    }
+
     static int[][] campaignScene(Renderer r, int s) {
         long t0 = 3600000L * 10; // t = 0 in the renderer's clock
         LightState.mode = LightState.CAMPAIGN;
         LightState.slots = new int[] {1, 1, 2, 1, 1, 0, 0, 0, 0, 0};
         LightState.move = LightState.MOVE_NORMAL;
         LightState.neutrino = false;
+        LightState.slowMoving = false;
+        LightState.burnLevel = 0f;
         LightState.sensorCharge = 0f;
         LightState.pulseCharge = 0f;
         LightState.jumpCharge = 0f;
         LightState.sensorAt = 0L;
         LightState.pulseAt = 0L;
         LightState.jumpDoneAt = 0L;
+        LightState.supplies = -1f;
+        LightState.fuel = -1f;
+        LightState.fleetCR = -1f;
+        LightState.fleetHull = -1f;
+        LightState.supplyDays = -1f;
+        if (s >= 21) {
+            LightState.supplies = 0.7f;
+            LightState.fuel = 0.5f;
+            LightState.fleetCR = 0.8f;
+            LightState.fleetHull = 0.9f;
+            LightState.supplyDays = 40f;
+        }
         switch (s) {
+            case 20: { LightState.neutrino = true; int[][] f = null; for (long ms = 0; 2244 >= ms; ms += 40) f = r.render(t0 + ms); return f; }
+            case 21: LightState.slots = new int[] {1, 3, 2, 3, 1, 0, 0, 0, 0, 0}; LightState.fleetHull = 1f; return r.render(t0 + 1000);
+            case 22: LightState.fleetHull = 0.45f; return r.render(t0 + 1000);
+            case 23: LightState.fleetHull = 0.2f; LightState.supplies = 0.1f; return r.render(t0 + 1000);
+            case 24: LightState.supplyDays = 5f; return r.render(t0 + 800);
+            case 25: LightState.fuel = 0.15f; return r.render(t0 + 800);
+            case 26: LightState.supplyDays = 5f; LightState.fuel = 0.15f; return r.render(t0 + 2400);
+            case 27: LightState.supplyDays = 5f; LightState.fuel = 0.15f; return r.render(t0 + 800);
+            case 28: LightState.slowMoving = true; return r.render(t0 + 1000);
+            case 29: { LightState.neutrino = true; int[][] f = null; for (long ms = 0; 5300 >= ms; ms += 40) f = r.render(t0 + ms); return f; }
             case 0: return r.render(t0);
             case 1: return r.render(t0 + 2244);
             case 2: LightState.move = LightState.MOVE_SILENT; return r.render(t0 + 5000);
             case 3: LightState.move = LightState.MOVE_SILENT; return r.render(t0 + 6500);
-            case 4: LightState.move = LightState.MOVE_SUSTAINED; return r.render(t0 + 5000);
-            case 5: LightState.move = LightState.MOVE_SUSTAINED; return r.render(t0 + 5400);
-            case 6: LightState.move = LightState.MOVE_EMERGENCY; return r.render(t0 + 5000);
-            case 7: LightState.move = LightState.MOVE_EMERGENCY; return r.render(t0 + 5200);
-            case 8: LightState.neutrino = true; return r.render(t0 + 1500);
+            case 4: LightState.move = LightState.MOVE_SUSTAINED; LightState.burnLevel = 1f; return run(r, t0, 5000);
+            case 5: LightState.move = LightState.MOVE_SUSTAINED; LightState.burnLevel = 1f; return run(r, t0, 5400);
+            case 6: LightState.move = LightState.MOVE_EMERGENCY; LightState.burnLevel = 1f; return run(r, t0, 5000);
+            case 7: LightState.move = LightState.MOVE_EMERGENCY; LightState.burnLevel = 0.5f; return run(r, t0, 5200);
+            case 8: { LightState.neutrino = true; int[][] f = null; for (long ms = 0; 1500 >= ms; ms += 40) f = r.render(t0 + ms); return f; }
             case 9: LightState.sensorCharge = 0.8f; return r.render(t0 + 1000);
             case 10: LightState.sensorAt = t0 + 1000; return r.render(t0 + 1350);
             case 11: LightState.sensorAt = t0 + 1000; return r.render(t0 + 1800);
@@ -155,6 +188,7 @@ public class EffectTest {
             case 14: LightState.pulseAt = t0 + 1000; return r.render(t0 + 1060);
             case 15: LightState.pulseAt = t0 + 1000; return r.render(t0 + 1500);
             default:
+                if (s > 19) return null;
                 float charge = s == 16 ? 0.4f : 1f;
                 int[][] f = null;
                 long ms = 0;
@@ -290,6 +324,7 @@ public class EffectTest {
         expect("key 2 used = red (" + Integer.toHexString(u) + ")", ((u >> 16) & 255) > 150 && 40 > ((u >> 8) & 255) && 40 > (u & 255));
         check("tab = light blue", f[0][kbTab], Config.ready);
         check("D = light blue", f[0][Devices.keyIndex(Devices.KEY_D)], Config.ready);
+        expect("S not lit as a hotkey", !near(f[0][Devices.keyIndex(Devices.KEY_S)], Config.ready));
         check("F2 (codex) = light blue", f[0][Devices.keyIndex(Devices.KEY_F2)], Config.ready);
         check("F4 (quicksave) = light blue", f[0][Devices.keyIndex(Devices.KEY_F4)], Config.ready);
         check("F5 (quickload) = light blue", f[0][Devices.keyIndex(Devices.KEY_F5)], Config.ready);
@@ -361,6 +396,20 @@ public class EffectTest {
         expect("numpad system bar top = no charge", 0x20 > ((f[0][1 * 22 + 20] >> 16) & 255));
         check("mouse wheel = system ready", f[Devices.MOUSE][2 * 7 + 3], Config.ready);
         check("mouse logo = system ready", f[Devices.MOUSE][7 * 7 + 3], Config.ready);
+        // campaign mouse: supplies left, fuel right, wheel + logo blink on low stock
+        int mw = 2 * 7 + 3, ml = 7 * 7 + 3;
+        f = campaignScene(new Renderer(), 21);
+        m = f[Devices.MOUSE];
+        check("campaign mouse left bottom = supplies", m[7 * 7], Renderer.SUPPLY_COL);
+        expect("campaign mouse left top = empty (70%)", 0x20 > ((m[1 * 7] >> 8) & 255));
+        check("campaign mouse right bottom = fuel", m[7 * 7 + 6], Renderer.FUEL_COL);
+        expect("campaign mouse right top = empty (50%)", 0x20 > ((m[1 * 7 + 6] >> 16) & 255));
+        expect("no warning: wheel not alert", !near(m[mw], Renderer.ALERT_YELLOW) && !near(m[mw], Renderer.ALERT_RED));
+        f = campaignScene(new Renderer(), 24);
+        check("low supplies: wheel yellow", f[Devices.MOUSE][mw], Renderer.ALERT_YELLOW);
+        check("low supplies: logo yellow", f[Devices.MOUSE][ml], Renderer.ALERT_YELLOW);
+        f = campaignScene(new Renderer(), 25);
+        check("low fuel: wheel red", f[Devices.MOUSE][mw], Renderer.ALERT_RED);
         String[][] ids = {
             {"burndrive", "1"}, {"microburn_omega", "1"}, {"maneuveringjets", "1"}, {"plasmajets", "1"}, {"convulsive_lunge", "1"},
             {"phaseteleporter", "2"}, {"displacer", "2"}, {"skimmer_drone", "2"}, {"phasecloak", "3"},
@@ -411,6 +460,8 @@ public class EffectTest {
         say("neutrino detector");
         Thread.sleep(4000);
         LightState.neutrino = false;
+        LightState.slowMoving = false;
+        LightState.burnLevel = 0f;
         say("active sensor burst");
         for (int i = 1; i <= 20; i++) { LightState.sensorCharge = i / 20f; Thread.sleep(50); }
         LightState.sensorCharge = 0f;

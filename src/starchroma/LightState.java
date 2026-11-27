@@ -14,6 +14,8 @@ public class LightState {
     public static final int SLOT_EMPTY = 0;
     public static final int SLOT_READY = 1;
     public static final int SLOT_USED = 2;
+    /** a toggle ability that is switched on (transponder, neutrino detector, go dark...) */
+    public static final int SLOT_ACTIVE = 3;
 
     public static volatile int mode = IDLE;
 
@@ -27,6 +29,10 @@ public class LightState {
     public static volatile int[] slots = new int[10];
     public static volatile int move = MOVE_NORMAL;
     public static volatile boolean neutrino;
+    /** holding S: the fleet is moving slowly */
+    public static volatile boolean slowMoving;
+    /** fleet burn level as a share of 20 (0..1), drives the sustained / emergency burn animation */
+    public static volatile float burnLevel;
     /** charge-up of a duration ability, 0 = not charging, 0..1 while it winds up */
     public static volatile float sensorCharge;
     public static volatile float pulseCharge;
@@ -36,6 +42,13 @@ public class LightState {
     public static volatile long pulseAt;
     /** when a transverse jump actually moved the fleet */
     public static volatile long jumpDoneAt;
+    /** fleet logistics, all 0..1 (-1 = unknown): supplies vs cargo capacity, fuel vs tank, average CR, average hull */
+    public static volatile float supplies = -1f;
+    public static volatile float fuel = -1f;
+    public static volatile float fleetCR = -1f;
+    public static volatile float fleetHull = -1f;
+    /** days of supplies left at the current consumption (-1 = unknown) */
+    public static volatile float supplyDays = -1f;
 
     // combat
     public static volatile boolean hasShip;

@@ -11,15 +11,15 @@ public class ChromaEngine extends Thread {
     private static ChromaEngine instance;
 
     private final Logger log;
-    private final ChromaClient client = new ChromaClient();
+    final ChromaClient client = new ChromaClient();
     private final Renderer renderer = new Renderer();
     private final int[][] sent = new int[Devices.COUNT][];
     private final long[] sentAt = new long[Devices.COUNT];
-    private volatile boolean running = true;
+    volatile boolean running = true;
 
     private int sessionMode = -1;   // mode the open session was made for
     private long sessionReadyAt;    // Chroma ignores effects for a moment after init
-    private long lastBeat;
+    volatile boolean beatFailed;
     private long retryAt;
     private int failures;
     private boolean wasDead;
@@ -47,6 +47,10 @@ public class ChromaEngine extends Thread {
     }
 
     public void run() {
+        Heartbeat beat = new Heartbeat(this);
+        beat.start();
+        // fixed cadence (starchroma_frameMs): the time a request takes is not added on top
+        long next = System.currentTimeMillis();
         while (running) {
             long now = System.currentTimeMillis();
             try {
@@ -54,8 +58,13 @@ public class ChromaEngine extends Thread {
             } catch (Throwable t) {
                 log.warn("Star Chroma: lighting step failed", t);
             }
-            try { Thread.sleep(40); } catch (InterruptedException e) { }
+            next += Config.frameMs;
+            long cur = System.currentTimeMillis();
+            if (cur - next > 200) next = cur;  // fell far behind (PC asleep, Chroma stalled): resync
+            long wait = next - cur;
+            try { Thread.sleep(wait > 5 ? wait : 5); } catch (InterruptedException e) { }
         }
+        beat.interrupt();
         client.close();
     }
 
@@ -90,7 +99,7 @@ public class ChromaEngine extends Thread {
             failures = 0;
             log.info("Star Chroma: Chroma session opened");
             sessionReadyAt = now + 1200;
-            lastBeat = now;
+            beatFailed = false;
             for (int d = 0; d < Devices.COUNT; d++) sent[d] = null;
         }
         if (mode != sessionMode) {
@@ -98,12 +107,11 @@ public class ChromaEngine extends Thread {
             sessionMode = mode;
         }
 
-        if (now - lastBeat > 2000) {
-            lastBeat = now;
-            if (!client.heartbeat()) {
-                lostConnection(now);
-                return;
-            }
+        // the heartbeat runs on its own thread (a blocking request here made the lights hitch every 2 s)
+        if (beatFailed) {
+            beatFailed = false;
+            lostConnection(now);
+            return;
         }
         if (sessionReadyAt > now) return;
 
@@ -114,7 +122,7 @@ public class ChromaEngine extends Thread {
         int[][] frame = renderer.render(now);
         boolean all = mode == LightState.COMBAT || Config.campaignAllDevices;
         for (int d = 0; d < Devices.COUNT; d++) {
-            if (!all && d != Devices.KEYBOARD) continue;
+            if (!all && d != Devices.KEYBOARD && !(d == Devices.MOUSE && Config.campaignMouse)) continue;
             // only resend unchanged frames once a second
             if (sent[d] != null && same(sent[d], frame[d]) && 1000 > now - sentAt[d]) continue;
             if (!client.send(d, frame[d])) {
@@ -137,6 +145,26 @@ public class ChromaEngine extends Thread {
     private static boolean same(int[] a, int[] b) {
         for (int i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
         return true;
+    }
+
+    /** keeps the Chroma session alive every 2 s without blocking the frame loop */
+    static class Heartbeat extends Thread {
+        private final ChromaEngine engine;
+
+        Heartbeat(ChromaEngine engine) {
+            super("StarChroma heartbeat");
+            this.engine = engine;
+            setDaemon(true);
+        }
+
+        public void run() {
+            while (engine.running) {
+                try { Thread.sleep(2000); } catch (InterruptedException e) { return; }
+                if (engine.client.isOpen() && !engine.client.heartbeat() && engine.client.isOpen()) {
+                    engine.beatFailed = true;
+                }
+            }
+        }
     }
 
     /** releases the session on exit so Synapse lighting comes straight back */

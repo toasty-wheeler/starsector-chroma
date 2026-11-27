@@ -13,7 +13,7 @@ public class ChromaClient {
 
     public static final String ROOT = "http://localhost:54235/razer/chromasdk";
 
-    private String uri;
+    private volatile String uri;
 
     /** why the last request failed (for the log) */
     public static volatile String lastError;
