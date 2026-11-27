@@ -49,6 +49,24 @@ public class LightState {
     /** System.currentTimeMillis() when the flagship blew up */
     public static volatile long deathAt;
 
+    /** what kind of ship system (F key) the flagship has */
+    public static final int SYS_NONE = 0;
+    public static final int SYS_CHARGE = 1;    // burn drive, plasma burn, maneuvering jets...
+    public static final int SYS_TELEPORT = 2;  // phase teleporter, phase skimmer, displacer
+    public static final int SYS_PHASE = 3;     // phase cloak used as the ship system
+    public static final int SYS_FEEDER = 4;    // accelerated ammo feeder, fast missile racks, high energy focus
+    public static final int SYS_OTHER = 5;
+    public static volatile int systemType;
+    /** 0..1 how strongly the system is working right now (its effect level) */
+    public static volatile float systemLevel;
+    /** charging up, on, or charging down */
+    public static volatile boolean systemOn;
+    /** can be activated right now (not on, not cooling down, has charges) */
+    public static volatile boolean systemReady;
+    /** System.currentTimeMillis() when the system was switched on / finished (0 = never) */
+    public static volatile long systemAt;
+    public static volatile long systemEndAt;
+
     public static void resetCombat() {
         hasShip = false;
         flux = 0f;
@@ -59,5 +77,28 @@ public class LightState {
         venting = false;
         dead = false;
         deathAt = 0L;
+        systemType = SYS_NONE;
+        systemLevel = 0f;
+        systemOn = false;
+        systemReady = false;
+        systemAt = 0L;
+        systemEndAt = 0L;
+    }
+
+    /** sorts a ship system id into a lighting style; keyword fallbacks cover modded systems */
+    public static int classifySystem(String id) {
+        if (id == null) return SYS_NONE;
+        String s = id.toLowerCase();
+        if (has(s, "teleport") || has(s, "displacer") || has(s, "skimmer") || has(s, "blink")) return SYS_TELEPORT;
+        if (has(s, "phase") || has(s, "cloak")) return SYS_PHASE;
+        if (has(s, "feed") || has(s, "racks") || has(s, "focus") || has(s, "autoload")
+            || has(s, "reload") || has(s, "ammo")) return SYS_FEEDER;
+        if (has(s, "burn") || has(s, "jets") || has(s, "lunge") || has(s, "drive") || has(s, "dash")
+            || has(s, "charge") || has(s, "rush") || has(s, "boost")) return SYS_CHARGE;
+        return SYS_OTHER;
+    }
+
+    private static boolean has(String s, String part) {
+        return s.indexOf(part) >= 0;
     }
 }

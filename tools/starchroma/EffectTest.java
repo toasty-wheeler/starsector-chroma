@@ -26,6 +26,7 @@ public class EffectTest {
 
         sheet(out);
         campaignSheet(out);
+        systemSheet(out);
         checks();
         if (failures > 0) {
             System.out.println(failures + " CHECK(S) FAILED");
@@ -196,6 +197,67 @@ public class EffectTest {
         }
     }
 
+    // ------------------------------------------------------------------ ship systems
+
+    static final String[] SYS_NAMES = {
+        "burn drive ready (F light blue)", "burn drive on 0.6 s", "burn drive recharging (F red)",
+        "phase skimmer: collapse 0.2 s", "phase teleporter: in transit", "teleport: reappear 0.25 s after",
+        "phase cloak (system) 1.5 s", "accelerated ammo feeder 1 s", "other system (damper) 1 s",
+        "instant skimmer: burst 0.3 s"};
+    // type, on from ms, on until ms, render at ms
+    static final int[][] SYS_SCENES = {
+        {LightState.SYS_CHARGE, -1, -1, 400},
+        {LightState.SYS_CHARGE, 0, 5000, 600},
+        {LightState.SYS_CHARGE, 0, 1000, 1600},
+        {LightState.SYS_TELEPORT, 0, 2000, 200},
+        {LightState.SYS_TELEPORT, 0, 2000, 900},
+        {LightState.SYS_TELEPORT, 0, 600, 850},
+        {LightState.SYS_PHASE, 0, 5000, 1500},
+        {LightState.SYS_FEEDER, 0, 5000, 1000},
+        {LightState.SYS_OTHER, 0, 5000, 1000},
+        {LightState.SYS_TELEPORT, 0, 80, 650}};
+
+    static int[][] sysScene(Renderer r, int s, long t0) {
+        LightState.resetCombat();
+        LightState.mode = LightState.COMBAT;
+        LightState.hasShip = true;
+        int[] sc = SYS_SCENES[s];
+        LightState.systemType = sc[0];
+        LightState.systemReady = true;
+        int[][] f = null;
+        boolean was = false;
+        for (long ms = 0; sc[3] >= ms; ms += 20) {
+            boolean on = ms >= sc[1] && sc[1] >= 0 && sc[2] > ms;
+            if (on && !was) LightState.systemAt = t0 + ms;
+            if (!on && was) LightState.systemEndAt = t0 + ms;
+            was = on;
+            LightState.systemOn = on;
+            LightState.systemLevel = on ? Math.min(1f, (ms - sc[1]) / 300f) : 0f;
+            LightState.systemReady = !on && LightState.systemEndAt == 0L;
+            f = r.render(t0 + ms);
+        }
+        return f;
+    }
+
+    static void systemSheet(File out) throws Exception {
+        int cellW = 760, cellH = 300;
+        BufferedImage img = new BufferedImage(cellW * 2, cellH * ((SYS_NAMES.length + 1) / 2), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(new Color(24, 24, 28));
+        g.fillRect(0, 0, img.getWidth(), img.getHeight());
+        for (int s = 0; s < SYS_NAMES.length; s++) {
+            int[][] f = sysScene(new Renderer(), s, 100000L);
+            int ox = (s % 2) * cellW, oy = (s / 2) * cellH;
+            g.setColor(Color.WHITE);
+            g.drawString(SYS_NAMES[s], ox + 12, oy + 18);
+            draw(g, f, ox + 12, oy + 28);
+        }
+        g.dispose();
+        File file = new File(out, "systems.png");
+        ImageIO.write(img, "png", file);
+        System.out.println("wrote " + file);
+    }
+
     // ------------------------------------------------------------------ checks
 
     static void checks() {
@@ -237,6 +299,29 @@ public class EffectTest {
         expect("init uri parse", "http://localhost:54236/chromasdk".equals(
             ChromaClient.jsonString("{\"sessionid\":123,\"uri\":\"http:\\/\\/localhost:54236\\/chromasdk\"}", "uri")));
         expect("RZKEY_0 index", key0 == 22 + 11);
+
+        // ship systems
+        int kbF = Devices.keyIndex(Devices.KEY_F);
+        f = sysScene(new Renderer(), 0, 100000L);
+        check("system ready: F light blue", f[0][kbF], Config.ready);
+        f = sysScene(new Renderer(), 2, 100000L);
+        int fr = f[0][kbF];
+        expect("system recharging: F red (" + Integer.toHexString(fr) + ")", ((fr >> 16) & 255) > 150 && 40 > ((fr >> 8) & 255));
+        f = sysScene(new Renderer(), 4, 100000L);
+        int bright = 0;
+        for (int i = 0; i < f[0].length; i++) if (((f[0][i] >> 8) & 255) > 0x60) bright++;
+        expect("teleport in transit: keyboard mostly dark (" + bright + " bright)", 30 > bright);
+        f = sysScene(new Renderer(), 1, 100000L);
+        expect("burn drive: tinted warm", ((f[1][10] >> 16) & 255) > (f[1][10] & 255) + 40);
+        String[][] ids = {
+            {"burndrive", "1"}, {"microburn_omega", "1"}, {"maneuveringjets", "1"}, {"plasmajets", "1"}, {"convulsive_lunge", "1"},
+            {"phaseteleporter", "2"}, {"displacer", "2"}, {"skimmer_drone", "2"}, {"phasecloak", "3"},
+            {"ammofeed", "4"}, {"fastmissileracks", "4"}, {"highenergyfocus", "4"}, {"targetingfeed", "4"},
+            {"damper", "5"}, {"fortressshield", "5"}, {"temporalshell", "5"}};
+        for (int k = 0; k < ids.length; k++) {
+            int got = LightState.classifySystem(ids[k][0]);
+            expect("system " + ids[k][0] + " -> " + ids[k][1] + " (got " + got + ")", got == Integer.parseInt(ids[k][1]));
+        }
     }
 
     static boolean near(int a, int b) {

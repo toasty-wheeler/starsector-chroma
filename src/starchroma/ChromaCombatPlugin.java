@@ -9,6 +9,7 @@ import com.fs.starfarer.api.combat.CombatEngineAPI;
 import com.fs.starfarer.api.combat.FluxTrackerAPI;
 import com.fs.starfarer.api.combat.ShieldAPI;
 import com.fs.starfarer.api.combat.ShipAPI;
+import com.fs.starfarer.api.combat.ShipSystemAPI;
 
 /** Registered in data/config/settings.json "plugins"; publishes the flagship's state each frame. */
 public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
@@ -17,11 +18,13 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
     private ShipAPI tracked;
     private ShipAPI deadShip;
     private boolean failed;
+    private boolean systemWasOn;
 
     public void init(CombatEngineAPI engine) {
         this.engine = engine;
         tracked = null;
         deadShip = null;
+        systemWasOn = false;
         LightState.resetCombat();
     }
 
@@ -60,6 +63,8 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
 
         if (tracked == null) {
             LightState.hasShip = false;
+            LightState.systemOn = false;
+            systemWasOn = false;
             return;
         }
         FluxTrackerAPI flux = tracked.getFluxTracker();
@@ -70,6 +75,30 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
         LightState.hull = tracked.getHullLevel();
         LightState.shieldOn = shield != null && shield.isOn();
         LightState.phased = tracked.isPhased();
+        readSystem(tracked);
         LightState.hasShip = true;
+    }
+
+    /** the F-key ship system (or the phase cloak on ships that have nothing else) */
+    private void readSystem(ShipAPI ship) {
+        ShipSystemAPI sys = ship.getSystem();
+        if (sys == null) sys = ship.getPhaseCloak();
+        if (sys == null) {
+            LightState.systemType = LightState.SYS_NONE;
+            LightState.systemOn = false;
+            LightState.systemReady = false;
+            LightState.systemLevel = 0f;
+            systemWasOn = false;
+            return;
+        }
+        boolean on = sys.isActive();
+        long now = System.currentTimeMillis();
+        if (on && !systemWasOn) LightState.systemAt = now;
+        if (!on && systemWasOn) LightState.systemEndAt = now;
+        systemWasOn = on;
+        LightState.systemType = LightState.classifySystem(sys.getId());
+        LightState.systemLevel = sys.getEffectLevel();
+        LightState.systemOn = on;
+        LightState.systemReady = !on && !sys.isCoolingDown() && !sys.isOutOfAmmo();
     }
 }

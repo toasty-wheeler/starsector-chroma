@@ -13,6 +13,7 @@ public class Renderer {
     // animation state
     private float shieldFill;        // 0..1 height reached by the shield colour
     private float phaseFill;
+    private float systemFade;
     private float lastHull = 1f;
     private float hitFlash;
     private boolean hadShip;
@@ -27,6 +28,7 @@ public class Renderer {
     public void resetCombat() {
         shieldFill = 0f;
         phaseFill = 0f;
+        systemFade = 0f;
         lastHull = 1f;
         hadShip = false;
         hitFlash = 0f;
@@ -250,7 +252,17 @@ public class Renderer {
 
         // shield rises slowly from the bottom, drops a bit faster
         shieldFill = approach(shieldFill, ship && LightState.shieldOn ? 1f : 0f, dt / 1.4f, dt / 0.6f);
-        phaseFill = approach(phaseFill, ship && LightState.phased ? 1f : 0f, dt / 0.8f, dt / 0.5f);
+        int sysType = ship ? LightState.systemType : LightState.SYS_NONE;
+        boolean sysOn = ship && LightState.systemOn;
+        boolean phasing = ship && (LightState.phased || (sysType == LightState.SYS_PHASE && sysOn));
+        phaseFill = approach(phaseFill, phasing ? 1f : 0f, dt / 0.8f, dt / 0.5f);
+        // the system effect fades in and out a little so short systems still read
+        float sysTarget = sysOn ? Math.max(0.35f, clamp01(LightState.systemLevel)) : 0f;
+        systemFade = approach(systemFade, sysTarget, dt / 0.15f, dt / 0.4f);
+        float sinceOn = (nowMs - LightState.systemAt) / 1000f;
+        // a teleport's reappearing burst waits until the collapse has played, however short the system
+        float sinceEnd = (nowMs - Math.max(LightState.systemEndAt, LightState.systemAt + 350L)) / 1000f;
+        boolean ended = LightState.systemEndAt >= LightState.systemAt && LightState.systemEndAt > 0L;
 
         if (ship && !hadShip) lastHull = hull; // a ship that starts damaged is not a hit
         hadShip = ship;
@@ -275,7 +287,14 @@ public class Renderer {
                 float y = ys[i];
                 int c = body;
                 if (shieldFill > 0f) c = lerp(c, shieldCol, edge(shieldFill * 1.15f - y));
-                if (phaseFill > 0f) c = lerp(c, Config.phase, edge(phaseFill * 1.15f - y) * 0.85f);
+                if (phaseFill > 0f) {
+                    c = lerp(c, Config.phase, edge(phaseFill * 1.15f - y) * 0.85f);
+                    c = phaseShimmer(c, d, i, xs[i], y, t, phaseFill);
+                }
+                if (sysType == LightState.SYS_CHARGE && systemFade > 0f) c = chargeStreaks(c, d, xs[i], y, t, systemFade);
+                else if (sysType == LightState.SYS_FEEDER && systemFade > 0f) c = ammoBelt(c, xs[i], y, t, systemFade);
+                else if (sysType == LightState.SYS_OTHER && systemFade > 0f) c = systemPulse(c, d, xs[i], y, t, systemFade);
+                else if (sysType == LightState.SYS_TELEPORT) c = teleport(c, d, i, xs[i], y, t, sysOn, sinceOn, ended, sinceEnd);
 
                 if (LightState.overloaded) {
                     // electric crackle
@@ -287,10 +306,123 @@ public class Renderer {
 
                 if (hitFlash > 0f) c = lerp(c, 0xFF1000, hitFlash * 0.6f);
 
+                if (d == Devices.KEYBOARD && i == KB_F && sysType != LightState.SYS_NONE) c = systemKey(sysType, sysOn, t);
+
                 if (damage > 0.04f) c = damaged(c, d, i, damage, bucket);
                 a[i] = c;
             }
         }
+    }
+
+    // ------------------------------------------------------------------ ship systems (F key)
+
+    static final int KB_F = Devices.keyIndex(Devices.KEY_F);
+    static final int CHARGE_HOT = 0xFF6A10, CHARGE_CORE = 0xFFF0C8;
+    static final int AMMO_BRASS = 0xFFC21A, AMMO_FLASH = 0xFF5A00;
+    static final int WARP = 0x7FE8FF;
+    static final int SYSTEM_GLOW = 0x40FFC8;
+
+    /** the F key: light blue when ready, the system's colour while on, red while it recharges */
+    private int systemKey(int type, boolean on, float t) {
+        if (on) {
+            int col;
+            switch (type) {
+                case LightState.SYS_CHARGE: col = CHARGE_CORE; break;
+                case LightState.SYS_TELEPORT: col = WARP; break;
+                case LightState.SYS_PHASE: col = Config.phase; break;
+                case LightState.SYS_FEEDER: col = AMMO_BRASS; break;
+                default: col = SYSTEM_GLOW; break;
+            }
+            return scale(col, 0.8f + 0.2f * (float) Math.sin(t * 18f));
+        }
+        if (LightState.systemReady) return Config.ready;
+        return scale(Config.used, 0.85f + 0.15f * (float) Math.sin(t * 4f));
+    }
+
+    /** burn drives and jets: hot speed streaks racing left to right, warm tint over everything */
+    private int chargeStreaks(int c, int d, float x, float y, float t, float level) {
+        int row = (int) (y * 10f + 0.5f);
+        float seed = rand(d * 17 + row, 5);
+        float speed = 2.2f + 1.6f * seed + 2.5f * level;
+        float p = frac(x * 1.8f - t * speed + seed);
+        float streak = p * p * p;  // bright head on the right, tail fading to the left
+        // darker ember base so the streaks stand out
+        c = lerp(c, 0x5A1800, level * 0.8f);
+        int sc = lerp(CHARGE_HOT, CHARGE_CORE, streak);
+        return lerp(c, sc, streak * level);
+    }
+
+    /** ammo feeders: brass dashes running along the rows like a belt, with muzzle-flash flicker */
+    private int ammoBelt(int c, float x, float y, float t, float level) {
+        int row = (int) (y * 5f + 0.5f);
+        float dir = (row & 1) == 0 ? 1f : -1f;
+        float p = frac(x * 5f - t * 4.5f * dir + row * 0.37f);
+        float dash = clamp01((0.5f - Math.abs(p - 0.5f)) * 6f - 1f);
+        float flash = rand((int) (t * 14f), 3) > 0.7f ? 1f : 0f;
+        c = scale(c, 1f - 0.75f * level);
+        int dc = lerp(AMMO_BRASS, AMMO_FLASH, flash * 0.6f);
+        return lerp(c, dc, level * (0.25f + 0.75f * dash));
+    }
+
+    /** any other system: soft rings rolling out from the middle */
+    private int systemPulse(int c, int d, float x, float y, float t, float level) {
+        float aspect = Devices.ASPECT[d];
+        float dx = (x - 0.5f) * aspect, dy = y - 0.5f;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy) / Math.max(1f, aspect * 0.5f);
+        float wave = 0.5f + 0.5f * (float) Math.sin((dist * 9f - t * 7f));
+        c = scale(c, 1f - 0.45f * level);
+        return lerp(c, SYSTEM_GLOW, level * (0.1f + 0.85f * wave * wave));
+    }
+
+    /** phase: the lights go ghostly, violet interference bands drift and a few keys glint */
+    private int phaseShimmer(int c, int d, int i, float x, float y, float t, float level) {
+        float w = 0.5f + 0.5f * (float) (Math.sin(x * 9f + t * 2.6f) * Math.sin(y * 6f - t * 1.9f));
+        int ghost = scale(c, 0.3f + 0.6f * w);
+        if (rand(d * 613 + i, (int) (t * 6f)) > 0.96f) ghost = 0xE6D2FF;
+        return lerp(c, ghost, level);
+    }
+
+    /**
+     * teleporters: on activation the light collapses into the middle, the ship is "gone" (dim
+     * cyan static), then it reappears as a burst from a random spot
+     */
+    private int teleport(int c, int d, int i, float x, float y, float t, boolean on, float sinceOn, boolean ended, float sinceEnd) {
+        float aspect = Devices.ASPECT[d];
+        float norm = Math.max(1f, aspect * 0.5f);
+        if (on || (ended && 0f > sinceEnd)) {
+            float dx = (x - 0.5f) * aspect, dy = y - 0.5f;
+            float dist = (float) Math.sqrt(dx * dx + dy * dy) / norm;
+            float k = clamp01(sinceOn / 0.35f);
+            float radius = 0.9f * (1f - k);
+            float ring = (dist - radius) / 0.1f;
+            float glow = (float) Math.exp(-ring * ring);
+            // everything outside the closing ring is sucked dark
+            float keep = dist > radius ? 0.12f : 1f;
+            int out = scale(c, keep);
+            if (k >= 1f) {
+                // in transit: dim cyan static
+                out = rand(d * 211 + i, (int) (t * 20f)) > 0.88f ? scale(WARP, 0.6f) : scale(WARP, 0.06f);
+                float centre = (float) Math.exp(-dist * dist / 0.01f);
+                out = lerp(out, 0xFFFFFF, centre * 0.8f);
+            }
+            return lerp(out, 0xFFFFFF, glow);
+        }
+        if (ended && 0.9f > sinceEnd) {
+            int seed = (int) (LightState.systemEndAt & 0x7FFFFFFF);
+            float ox = 0.15f + 0.7f * rand(seed, 1), oy = 0.2f + 0.6f * rand(seed, 2);
+            float dx = (x - ox) * aspect, dy = y - oy;
+            float dist = (float) Math.sqrt(dx * dx + dy * dy) / norm;
+            float radius = sinceEnd * 1.6f;
+            float ring = (dist - radius) / 0.14f;
+            float fade = 1f - sinceEnd / 0.9f;
+            float glow = (float) Math.exp(-ring * ring) * fade;
+            float flash = 0.12f > sinceEnd ? (float) Math.exp(-dist * dist / 0.02f) : 0f;
+            // the world fades back in behind the ring
+            int out = radius > dist ? c : scale(c, 0.12f + 0.88f * (1f - fade));
+            out = lerp(out, WARP, glow);
+            return lerp(out, 0xFFFFFF, Math.max(flash, glow * 0.5f));
+        }
+        return c;
     }
 
     /** hull damage: keys flicker off, show glitch colours, and finally die for good */

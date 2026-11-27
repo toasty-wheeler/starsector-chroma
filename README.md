@@ -24,7 +24,14 @@ Razer Chroma lighting for Starsector 0.98a. The game talks to the Razer Chroma S
 
 **Combat** (every Chroma device)
 - Everything turns light white.
-- Shields on: light blue fills the LEDs from the bottom to the top, then drains when you drop them. Phase cloak does the same in violet.
+- Shields on: light blue fills the LEDs from the bottom to the top, then drains when you drop them. Phase cloak does the same in violet, with drifting ghostly bands and glints.
+- Ship system (**F**): the F key is light blue when the system is ready, glows in the system's colour while it runs, and is red while it recharges. Each kind of system has its own effect:
+  - Charge (Burn Drive, Plasma Burn, Maneuvering/Plasma Jets, Full Burn, Convulsive Lunge): the lights drop to embers and hot white-orange streaks race across them.
+  - Teleport (Phase Teleporter, Phase Skimmer, Displacer): the light collapses into the middle, flickers as dim cyan static while you're in transit, then bursts back out from a random spot.
+  - Phase (Phase Cloak as the system): the violet phase effect above.
+  - Weapon boost (Accelerated Ammo Feeder, Fast Missile Racks, High Energy Focus, Targeting Feed): brass ammo-belt dashes run along the rows with muzzle-flash flicker.
+  - Anything else (Damper Field, Fortress Shield, Temporal Shell, modded systems...): teal rings roll out from the middle.
+  Modded systems are sorted by their id (anything with "burn", "jets", "teleport", "skimmer", "phase", "feed" and so on).
 - Flux: the white heats up to deep red-orange; the shield colour goes blue → violet → red-orange.
 - Hull damage: a red flash on every hit, and as hull drops, keys flicker off, show glitch colours (sparks, red, magenta, cyan) and eventually die for good.
 - Overload: electric white-blue crackle. Venting: fast pulsing.
