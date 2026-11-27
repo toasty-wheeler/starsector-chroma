@@ -209,6 +209,10 @@ public class EffectTest {
         int u = f[0][key2];
         expect("key 2 used = red (" + Integer.toHexString(u) + ")", ((u >> 16) & 255) > 150 && 40 > ((u >> 8) & 255) && 40 > (u & 255));
         check("tab = light blue", f[0][kbTab], Config.ready);
+        check("D = light blue", f[0][Devices.keyIndex(Devices.KEY_D)], Config.ready);
+        check("F2 (codex) = light blue", f[0][Devices.keyIndex(Devices.KEY_F2)], Config.ready);
+        check("F4 (quicksave) = light blue", f[0][Devices.keyIndex(Devices.KEY_F4)], Config.ready);
+        check("F5 (quickload) = light blue", f[0][Devices.keyIndex(Devices.KEY_F5)], Config.ready);
 
         f = scene(new Renderer(), 1, 100000L);
         check("combat = light white", f[1][10], Config.combatWhite);

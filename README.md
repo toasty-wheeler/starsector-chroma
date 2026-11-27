@@ -19,7 +19,7 @@ Razer Chroma lighting for Starsector 0.98a. The game talks to the Razer Chroma S
   - **Transverse Jump**: purple and dark purple tendrils close in on the middle while it charges, and snap back once the jump goes through.
 - Set `starchroma_baseMode` to `spectrum`, `wave` or `static` for a fixed background instead.
 - Keys **1–0** match the ability bar: light blue = ready, red (slow pulse) = active, cooling down or not usable right now. Each key flashes white when its ability is ready again. Empty slots show the background.
-- **Tab** (map), **E** (intel), **C**, **F**, **R**, **I** glow light blue.
+- **Tab** (map), **E** (intel), **C**, **D**, **F**, **R**, **I**, **F2** (codex), **F4** (quicksave) and **F5** (quickload) glow light blue.
 - Mouse, headset, mousepad etc. keep your own Synapse lighting (set `starchroma_campaignAllDevices` to `true` to light them too).
 
 **Combat** (every Chroma device)
