@@ -204,7 +204,8 @@ public class EffectTest {
         "phase skimmer: collapse 0.2 s", "phase teleporter: in transit", "teleport: reappear 0.25 s after",
         "phase cloak (system) 1.5 s", "accelerated ammo feeder 1 s", "other system (damper) 1 s",
         "instant skimmer: burst 0.3 s", "hull 50%: red/orange alarm keys", "mouse sides: ammo 60% / skimmer 1 of 3 + reloading",
-        "mouse sides: ammo 15% (low) / cooldown half way", "overload while ship gone (must be plain)"};
+        "mouse sides: ammo 15% (low) / cooldown half way", "overload while ship gone (must be plain)",
+        "crew readiness 25%: yellow outline", "crew readiness 10%: red outline"};
     // type, on from ms, on until ms, render at ms
     static final int[][] SYS_SCENES = {
         {LightState.SYS_CHARGE, -1, -1, 400},
@@ -220,7 +221,9 @@ public class EffectTest {
         {LightState.SYS_NONE, -1, -1, 400},
         {LightState.SYS_TELEPORT, -1, -1, 400},
         {LightState.SYS_CHARGE, -1, -1, 400},
-        {LightState.SYS_NONE, -1, -1, 400}};
+        {LightState.SYS_NONE, -1, -1, 400},
+        {LightState.SYS_NONE, -1, -1, 1250},
+        {LightState.SYS_NONE, -1, -1, 715}};
 
     static int[][] sysScene(Renderer r, int s, long t0) {
         LightState.resetCombat();
@@ -245,6 +248,8 @@ public class EffectTest {
                     LightState.systemRecharge = 0.5f; break;
                 case 12: LightState.ammo = 0.15f; LightState.systemReady = false; LightState.systemRecharge = 0.5f; break;
                 case 13: LightState.overloaded = true; LightState.hasShip = false; break;
+                case 14: LightState.cr = 0.25f; break;
+                case 15: LightState.cr = 0.10f; break;
                 default: break;
             }
             f = r.render(t0 + ms);
@@ -341,6 +346,14 @@ public class EffectTest {
         expect("mouse left top = empty (60% ammo)", 0x30 > ((m[1 * 7] >> 16) & 255));
         check("mouse right bottom = charge ready", m[7 * 7 + 6], Config.ready);
         expect("mouse right top = no charge", 0x20 > ((m[1 * 7 + 6] >> 16) & 255));
+        f = sysScene(new Renderer(), 14, 100000L);
+        check("CR 25%: keyboard corner yellow", f[0][5 * 22 + 1], Renderer.CR_YELLOW);
+        check("CR 25%: mousepad yellow", f[Devices.MOUSEPAD][3], Renderer.CR_YELLOW);
+        check("CR 25%: inner key untouched", f[0][3 * 22 + 8], Config.combatWhite);
+        f = sysScene(new Renderer(), 15, 100000L);
+        check("CR 10%: number row red", f[0][1 * 22 + 6], Renderer.CR_RED);
+        f = sysScene(new Renderer(), 1, 100000L);
+        expect("full CR: no outline", near(f[0][5 * 22 + 1], Config.combatWhite) || f[0][5 * 22 + 1] != Renderer.CR_YELLOW);
         String[][] ids = {
             {"burndrive", "1"}, {"microburn_omega", "1"}, {"maneuveringjets", "1"}, {"plasmajets", "1"}, {"convulsive_lunge", "1"},
             {"phaseteleporter", "2"}, {"displacer", "2"}, {"skimmer_drone", "2"}, {"phasecloak", "3"},

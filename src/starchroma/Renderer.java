@@ -318,6 +318,35 @@ public class Renderer {
             }
         }
         if (ship) mouseSides(frame[Devices.MOUSE], sysType, sysOn, t);
+        if (ship && 0.30f >= LightState.cr) crAlarm(LightState.cr, t);
+    }
+
+    public static final int CR_YELLOW = 0xFFC800, CR_RED = 0xFF1000;
+    static final boolean[] KB_OUTLINE = new boolean[6 * 22];
+    static {
+        for (int r = 0; 6 > r; r++) {
+            for (int c = 1; 22 > c; c++) {
+                // the outer edge of a full-size board, plus the main typing block's edge
+                // (number row, Esc/Tab/Caps/Shift/Ctrl column, Backspace/Enter/Shift column) so
+                // 60% and TKL boards like the Huntsman Mini show a full frame too
+                boolean outer = r == 0 || r == 5 || c == 1 || c == 21;
+                boolean block = (r == 1 && 14 >= c) || (c == 14 && r >= 1 && 4 >= r) || (c == 15 && r == 5);
+                KB_OUTLINE[r * 22 + c] = outer || block;
+            }
+        }
+    }
+
+    /** low crew readiness: the keyboard and mousepad outlines blink yellow (30% or less) or red (15% or less) */
+    private void crAlarm(float cr, float t) {
+        boolean critical = 0.15f >= cr;
+        int col = critical ? CR_RED : CR_YELLOW;
+        float rate = critical ? 1.4f : 0.8f;
+        float b = 0.5f + 0.5f * (float) Math.cos(t * rate * 6.2832f);
+        int on = scale(col, b * b);
+        int[] kb = frame[Devices.KEYBOARD];
+        for (int i = 0; i < kb.length; i++) if (KB_OUTLINE[i]) kb[i] = on;
+        int[] pad = frame[Devices.MOUSEPAD];
+        for (int i = 0; i < pad.length; i++) pad[i] = on;
     }
 
     /**

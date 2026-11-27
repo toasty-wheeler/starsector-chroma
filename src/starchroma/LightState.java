@@ -73,6 +73,8 @@ public class LightState {
     public static volatile float systemRecharge = 1f;
     /** 0..1 ammo left in the selected weapon group (or the whole ship); -1 = no ammo weapons */
     public static volatile float ammo = -1f;
+    /** combat readiness (crew readiness) of the flagship, 0..1 */
+    public static volatile float cr = 1f;
     /** System.currentTimeMillis() of the last combat update; stale state is not shown */
     public static volatile long combatAt;
 
@@ -96,6 +98,7 @@ public class LightState {
         systemMaxCharges = 0;
         systemRecharge = 1f;
         ammo = -1f;
+        cr = 1f;
         combatAt = 0L;
     }
 

@@ -83,6 +83,7 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
         LightState.overloaded = flux != null && flux.isOverloaded() && flux.getOverloadTimeRemaining() > 0f;
         LightState.venting = flux != null && flux.isVenting();
         LightState.ammo = readAmmo(tracked);
+        LightState.cr = tracked.getCurrentCR();
         LightState.hull = tracked.getHullLevel();
         LightState.shieldOn = shield != null && shield.isOn();
         LightState.phased = tracked.isPhased();
