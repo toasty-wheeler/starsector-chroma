@@ -15,6 +15,17 @@ LIBS="$CORE/starfarer.api.jar;$CORE/lwjgl.jar;$CORE/lwjgl_util.jar;$CORE/log4j-1
 
 "$JAVA" -cp "$JANINO" org.codehaus.janino.JavaSourceClassLoader -sourcepath "$ROOT/tools" Build "$ROOT" "$CORE"
 
+# Starsector refuses mod classes that touch java.io outside this whitelist (or reflection) with
+# "SecurityException: File access and reflection are not allowed to scripts" -- only at runtime in game
+ALLOWED="BufferedInputStream BufferedReader FilterInputStream InputStreamReader Reader Serializable InvalidClassException ObjectStreamException InputStream IOException PrintStream PrintWriter ByteArrayInputStream FilterOutputStream OutputStream Closeable Flushable StringReader"
+BAD=""
+for ref in $(cat "$ROOT"/build/classes/starchroma/*.class | tr -c '[:print:]' '\n' | grep -o 'java/io/[A-Za-z]*\|java/lang/reflect/[A-Za-z]*\|java/nio/file/[A-Za-z]*' | sort -u); do
+    name="${ref##*/}"
+    case "$ref" in java/io/*) case " $ALLOWED " in *" $name "*) continue;; esac;; esac
+    BAD="$BAD $ref"
+done
+if [ -n "$BAD" ]; then echo "ERROR: classes Starsector blocks for mods:$BAD"; exit 1; fi
+
 # load every class with strict bytecode verification (catches Janino miscompiles)
 OLDIFS="$IFS"; IFS=';'; set -- $LIBS; IFS="$OLDIFS"
 "$JAVA" -Xverify:all -cp "$JANINO" org.codehaus.janino.JavaSourceClassLoader -sourcepath "$ROOT/tools" \

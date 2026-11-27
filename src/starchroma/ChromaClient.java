@@ -1,6 +1,5 @@
 package starchroma;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -112,18 +111,19 @@ public class ChromaClient {
             }
             int code = con.getResponseCode();
             InputStream in = code >= 400 ? con.getErrorStream() : con.getInputStream();
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            // no ByteArrayOutputStream: Starsector only lets mods use a whitelist of java.io classes
+            StringBuilder buf = new StringBuilder();
             if (in != null) {
                 byte[] tmp = new byte[1024];
                 int n;
-                while ((n = in.read(tmp)) > 0) buf.write(tmp, 0, n);
+                while ((n = in.read(tmp)) > 0) buf.append(new String(tmp, 0, n, "ISO-8859-1"));
                 in.close();
             }
             if (code >= 400) {
-                lastError = method + " " + url + " -> HTTP " + code + " " + new String(buf.toByteArray(), "UTF-8");
+                lastError = method + " " + url + " -> HTTP " + code + " " + buf.toString();
                 return null;
             }
-            return new String(buf.toByteArray(), "UTF-8");
+            return buf.toString();
         } catch (Throwable t) {
             lastError = method + " " + url + " -> " + t;
             return null;
