@@ -28,13 +28,15 @@ public class Devices {
     public static final float[][] Y = new float[COUNT][];
 
     // keyboard keys (Razer RZKEY codes: row << 8 | column)
+    // (bottom letter row: column 2 is the ISO key next to Left Shift, so Z = 0x0403, X = 0x0404, C = 0x0405)
     public static final int KEY_ESC = 0x0001;
     public static final int KEY_TAB = 0x0201;
     public static final int KEY_E = 0x0204;
     public static final int KEY_R = 0x0205;
     public static final int KEY_I = 0x0209;
     public static final int KEY_F = 0x0305;
-    public static final int KEY_C = 0x0404;
+    public static final int KEY_C = 0x0405;
+    public static final int KEY_X = 0x0404;
     public static final int KEY_S = 0x0303;
     public static final int KEY_D = 0x0304;
     public static final int KEY_F2 = 0x0004;

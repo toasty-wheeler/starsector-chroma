@@ -29,6 +29,8 @@ public class LightState {
     public static volatile int[] slots = new int[10];
     public static volatile int move = MOVE_NORMAL;
     public static volatile boolean neutrino;
+    /** 0..1 how deep into abyssal hyperspace the fleet is (1 inside an abyssal star system); 0 = not in deep space */
+    public static volatile float abyss;
     /** holding S: the fleet is moving slowly */
     public static volatile boolean slowMoving;
     /** fleet burn level as a share of 20 (0..1), drives the sustained / emergency burn animation */
@@ -57,7 +59,12 @@ public class LightState {
     public static volatile boolean shieldOn;
     public static volatile boolean phased;
     public static volatile boolean overloaded;
+    /** seconds of overload left, and the longest seen during this overload (its full length) */
+    public static volatile float overloadLeft;
+    public static volatile float overloadTotal;
     public static volatile boolean venting;
+    /** all engines flamed out (or flaming out) */
+    public static volatile boolean flamedOut;
     public static volatile boolean dead;
     /** System.currentTimeMillis() when the flagship blew up */
     public static volatile long deathAt;
@@ -98,7 +105,10 @@ public class LightState {
         shieldOn = false;
         phased = false;
         overloaded = false;
+        overloadLeft = 0f;
+        overloadTotal = 0f;
         venting = false;
+        flamedOut = false;
         dead = false;
         deathAt = 0L;
         systemType = SYS_NONE;

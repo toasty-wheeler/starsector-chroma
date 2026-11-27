@@ -68,12 +68,20 @@ public class Renderer {
     static final int NEUTRINO = 0x2E7BFF, NEUTRINO_LIGHT = 0x7FD0FF, STAR_BLUE = 0x9FC8FF;
     static final int SLOW_RIPPLE = 0xFF1A08;
     public static final int TOGGLE_ON = 0xFFC000, TOGGLE_ON_LIGHT = 0xFFF0A0;
-    public static final int ALERT_YELLOW = 0xFFC800, ALERT_RED = 0xFF1000;
+    public static final int ALERT_YELLOW = 0xFFFF00, ALERT_RED = 0xFF1000;
     public static final int SUPPLY_COL = 0x60FF40, FUEL_COL = 0xFF9A1A;
 
     private float neutrinoLevel;
     private float burnSpeed;
     private double burnClock;
+    private boolean slowWas;
+    /** animation time when S was let go (-1 = held or long gone) */
+    private float slowReleaseT = -1f;
+    static final float SLOW_RIPPLE_SECONDS = 1.4f;
+    private float slowPressT;
+    /** overload crackle clock (ticks slow down as the overload wears off) and 0..1 how far it has worn off */
+    private double overloadClock;
+    private float overloadHealed;
     static final int PULSE = 0x9FDCFF;
     static final int TENDRIL_DARK = 0x22073F, TENDRIL = 0x8E34F0, TENDRIL_TIP = 0xE0B0FF;
     static final int[] STARS_SUSTAINED = {0xFFD040, 0xFF8A20, 0xFF3A10};
@@ -90,12 +98,21 @@ public class Renderer {
         boolean status = "status".equals(Config.baseMode);
         if (status) updateJump(dt, now);
         neutrinoLevel = approach(neutrinoLevel, LightState.neutrino ? 1f : 0f, dt / 0.8f, dt / 0.8f);
+        // deep space: fully dark a little way past the edge of the abyss, fading over ~1.5 s
+        float abyss = LightState.abyss;
+        abyssLevel = approach(abyssLevel, abyss > 0f ? Math.min(1f, 0.6f + abyss * 4f) : 0f, dt / 1.5f, dt / 1.5f);
         // burn animation: blends in and speeds up with the fleet's burn level (full at burn 20); its own
         // clock so a speed change never makes the star field jump
         boolean burning = LightState.move == LightState.MOVE_SUSTAINED || LightState.move == LightState.MOVE_EMERGENCY;
         burnSpeed = approach(burnSpeed, burning ? clamp01(LightState.burnLevel) : 0f, dt / 0.6f, dt / 0.6f);
         burnClock += Math.min(dt, 0.1f) * burnSpeed;
         if (burnClock >= 3600.0) burnClock -= 3600.0;
+        // letting go of S: no new ripples, the ones already out finish spreading
+        boolean slow = LightState.slowMoving;
+        if (slowWas && !slow) slowReleaseT = t;
+        if (slow && !slowWas) slowPressT = t;
+        if (slow) slowReleaseT = -1f;
+        slowWas = slow;
 
         for (int d = 0; d < Devices.COUNT; d++) {
             int[] a = frame[d];
@@ -110,6 +127,7 @@ public class Renderer {
         lowStockFlash(t);
         mouseCampaign(t);
         int[] kb = frame[Devices.KEYBOARD];
+        System.arraycopy(kb, 0, keysUnder, 0, kb.length); // to tell the lit buttons from the background
         logistics(kb, t);
 
         int[] slots = LightState.slots;
@@ -131,6 +149,132 @@ public class Renderer {
 
         for (int k = 0; k < Devices.KEY_SCREENS.length; k++) {
             kb[Devices.keyIndex(Devices.KEY_SCREENS[k])] = Config.ready;
+        }
+        if (status && abyssLevel > 0.001f) deepSpaceFlicker(kb, t);
+        // last, so the ripples pass over the hotkeys, ability keys and bars instead of under them
+        if (status) slowRipples(kb, t);
+        if (status) abilityRings(t, now);
+    }
+
+
+    /** sensor burst, interdiction pulse and jump tendrils, drawn last on every device so they pass over the buttons too */
+    private void abilityRings(float t, long now) {
+        boolean sensor = LightState.sensorCharge > 0f || (LightState.sensorAt > 0L && now >= LightState.sensorAt && 1500L > now - LightState.sensorAt);
+        boolean pulse = LightState.pulseCharge > 0f || (LightState.pulseAt > 0L && now >= LightState.pulseAt && 1300L > now - LightState.pulseAt);
+        boolean jump = jumpLevel > 0.001f;
+        if (!sensor && !pulse && !jump) return;
+        for (int d = 0; d < Devices.COUNT; d++) {
+            int[] a = frame[d];
+            float[] xs = Devices.X[d];
+            float[] ys = Devices.Y[d];
+            float aspect = Devices.ASPECT[d];
+            // distance from the middle (on the keyboard: the middle of the letter keys, G/H), 1 = farthest corner
+            float cx = d == Devices.KEYBOARD ? MID_KEYS_X : 0.5f;
+            float cy = d == Devices.KEYBOARD ? MID_KEYS_Y : 0.5f;
+            float fx = Math.max(cx, 1f - cx) * aspect, fy = Math.max(cy, 1f - cy);
+            float far = fx * fx + fy * fy;
+            for (int i = 0; i < a.length; i++) {
+                float kx = (xs[i] - cx) * aspect, ky = ys[i] - cy;
+                float dk = (float) Math.sqrt((kx * kx + ky * ky) / far);
+                int c = sensor || pulse ? ring(a[i], dk, t, now) : a[i];
+                a[i] = jump ? tendrils(c, kx, ky, dk, t) : c;
+            }
+        }
+    }
+
+
+    /** transverse jump: purple tendrils close in on the middle (kx, ky from the middle, dk 1 = farthest corner) */
+    private int tendrils(int c, float kx, float ky, float dk, float t) {
+        float L = jumpLevel;
+        float th = (float) Math.atan2(ky, kx);
+        float arms = 0.5f + 0.5f * (float) Math.sin(th * 6f + dk * 9f - t * 2.6f);
+        float front = 1.05f - L * 1.1f;
+        float m = clamp01((dk - front + arms * 0.22f) / 0.1f);
+        int col = lerp(TENDRIL_DARK, TENDRIL, arms * (0.6f + 0.4f * (float) Math.sin(t * 4f + dk * 6f)));
+        float tip = (dk - front - arms * 0.05f) / 0.07f;
+        col = lerp(col, TENDRIL_TIP, (float) Math.exp(-tip * tip) * arms);
+        return lerp(scale(c, 1f - 0.6f * L), col, m);
+    }
+    private int ring(int c, float dk, float t, long now) {
+        // active sensor burst: gathering glow, then a white ring from the middle
+        float sc = LightState.sensorCharge;
+        if (sc > 0f) c = lerp(c, 0xFFFFFF, sc * 0.7f * (float) Math.exp(-(dk * dk) / (0.06f + 0.1f * sc)));
+        float se = (now - LightState.sensorAt) / 1000f;
+        if (LightState.sensorAt > 0L && 1.5f > se && se >= 0f) {
+            float ring = (dk - se * 1.05f) / 0.09f;
+            float v = (float) Math.exp(-ring * ring) * (1f - se / 1.5f);
+            if (0.08f > se) v = 1f;
+            c = lerp(c, 0xFFFFFF, v);
+        }
+
+        // interdiction pulse: the board dims and a ring closes in while it charges ... then it goes off
+        float pc = LightState.pulseCharge;
+        if (pc > 0f) {
+            c = scale(c, 1f - 0.6f * pc);
+            float r = 1f - pc;
+            float ring = (dk - r) / 0.08f;
+            float beat = 0.55f + 0.45f * (float) Math.sin(t * (6f + pc * 14f));
+            c = lerp(c, PULSE, (float) Math.exp(-ring * ring) * 0.95f * beat);
+            c = lerp(c, 0xFFFFFF, pc * pc * (float) Math.exp(-(dk * dk) / 0.01f));
+        }
+        float pe = (now - LightState.pulseAt) / 1000f;
+        if (LightState.pulseAt > 0L && 1.3f > pe && pe >= 0f) {
+            float fade = 1f - pe / 1.3f;
+            float ring = (dk - pe * 1.5f) / 0.16f;
+            float echo = (dk - (pe - 0.25f) * 1.5f) / 0.08f;
+            float v = (float) Math.exp(-ring * ring) * fade;
+            if (pe > 0.25f) v = Math.max(v, (float) Math.exp(-echo * echo) * fade * 0.5f);
+            if (0.12f > pe) v = Math.max(v, 1f - pe / 0.12f);
+            c = lerp(c, lerp(PULSE, 0xFFFFFF, v), v);
+        }
+
+        return c;
+    }
+    /** the keyboard as it was before the buttons (hotkeys, ability keys, bars) were drawn on it */
+    private final int[] keysUnder = new int[Devices.size(Devices.KEYBOARD)];
+    /** 0..1 how far the keyboard has gone dark for deep space (abyssal hyperspace) */
+    private float abyssLevel;
+
+    /**
+     * deep space: the background is blacked out (in statusPixel) and every lit button flickers like
+     * a failing light, each on its own random rhythm, with the odd longer dropout
+     */
+    private void deepSpaceFlicker(int[] kb, float t) {
+        for (int i = 0; i < kb.length; i++) {
+            if (kb[i] == keysUnder[i]) continue; // not a button
+            float rate = 7f + 9f * rand(i, 91);
+            int n = (int) Math.floor(t * rate + rand(i, 92) * 13f);
+            float r = rand(i * 7 + 3, n);
+            float b = r > 0.4f ? 1f : (r > 0.18f ? 0.35f : 0.03f);
+            // now and then a key goes out for a moment
+            int w = (int) Math.floor(t * 0.9f + rand(i, 93) * 11f);
+            if (0.22f > rand(i * 13 + 5, w)) b *= 0.08f;
+            kb[i] = scale(kb[i], 1f - abyssLevel * (1f - b));
+        }
+    }
+
+    /**
+     * holding S (moving slowly): small red ripples spreading from the S key; when it is let go
+     * the ripples already out keep spreading and fade instead of vanishing
+     */
+    private void slowRipples(int[] kb, float t) {
+        boolean slow = LightState.slowMoving;
+        boolean fading = !slow && slowReleaseT >= 0f && SLOW_RIPPLE_SECONDS > t - slowReleaseT;
+        if (!slow && !fading) return;
+        float aspect = Devices.ASPECT[Devices.KEYBOARD];
+        float sx = Devices.keyCol(Devices.KEY_S) / 21f;
+        float sy = 1f - Devices.keyRow(Devices.KEY_S) / 5f;
+        float[] xs = Devices.X[Devices.KEYBOARD];
+        float[] ys = Devices.Y[Devices.KEYBOARD];
+        for (int i = 0; i < kb.length; i++) {
+            float rx = (xs[i] - sx) * aspect, ry = ys[i] - sy;
+            float dist = (float) Math.sqrt(rx * rx + ry * ry);
+            // one wave at a time, the first leaving the key the moment S goes down
+            float age = frac((t - slowPressT) / SLOW_RIPPLE_SECONDS);
+            if (fading && t - age * SLOW_RIPPLE_SECONDS > slowReleaseT) continue; // born after the release
+            float ring = (dist - age * 0.8f) / 0.13f;
+            float v = (float) Math.exp(-ring * ring) * (1f - age);
+            if (v > 0.002f) kb[i] = lerp(kb[i], SLOW_RIPPLE, Math.min(1f, v * 1.5f));
         }
     }
 
@@ -231,12 +375,13 @@ public class Renderer {
         else if (move == LightState.MOVE_SUSTAINED) c = lerp(normal(t), burn(x, y, (float) burnClock, false), burnSpeed);
         else if (move == LightState.MOVE_EMERGENCY) c = lerp(normal(t), burn(x, y, (float) burnClock, true), burnSpeed);
         else c = normal(t);
+        // deep space: the keyboard's background goes black (the abilities still draw on top)
+        boolean kbd = aspect == Devices.ASPECT[Devices.KEYBOARD];
+        if (kbd && abyssLevel > 0f) c = scale(c, 1f - abyssLevel);
 
-        // polar position around the middle of the device, 1 = farthest corner
+        // position around the middle of the device
         float dx = (x - 0.5f) * aspect;
         float dy = y - 0.5f;
-        float maxR = (float) Math.sqrt(aspect * aspect * 0.25f + 0.25f);
-        float dn = (float) Math.sqrt(dx * dx + dy * dy) / maxR;
 
         // neutrino detector: a blue glow around the edge that weaves in and out (reaching about a
         // row deeper at its crests) and breathes in step with the normal background, which is
@@ -262,65 +407,7 @@ public class Renderer {
             c = lerp(c, col, g * neutrinoLevel);
         }
 
-        // holding S (moving slowly): small red ripples spreading from the S key
-        if (LightState.slowMoving && aspect == Devices.ASPECT[Devices.KEYBOARD]) {
-            float sx = (Devices.keyCol(Devices.KEY_S) / 21f - 0.5f) * aspect;
-            float sy = 1f - Devices.keyRow(Devices.KEY_S) / 5f - 0.5f;
-            float rx = dx - sx, ry = dy - sy;
-            float dist = (float) Math.sqrt(rx * rx + ry * ry);
-            float v = 0f;
-            for (int k = 0; 2 > k; k++) {
-                float age = frac(t / 1.4f + k * 0.5f);     // a new ripple every 0.7 s
-                float ring = (dist - age * 0.8f) / 0.13f;
-                v = Math.max(v, (float) Math.exp(-ring * ring) * (1f - age));
-            }
-            c = lerp(c, SLOW_RIPPLE, Math.min(1f, v * 1.5f));
-        }
-
-        // active sensor burst: gathering glow, then a white ring from the middle
-        float sc = LightState.sensorCharge;
-        if (sc > 0f) c = lerp(c, 0xFFFFFF, sc * 0.7f * (float) Math.exp(-(dn * dn) / (0.06f + 0.1f * sc)));
-        float se = (now - LightState.sensorAt) / 1000f;
-        if (LightState.sensorAt > 0L && 1.5f > se && se >= 0f) {
-            float ring = (dn - se * 1.05f) / 0.09f;
-            float v = (float) Math.exp(-ring * ring) * (1f - se / 1.5f);
-            if (0.08f > se) v = 1f;
-            c = lerp(c, 0xFFFFFF, v);
-        }
-
-        // interdiction pulse: the board dims and a ring closes in while it charges ... then it goes off
-        float pc = LightState.pulseCharge;
-        if (pc > 0f) {
-            c = scale(c, 1f - 0.6f * pc);
-            float r = 1f - pc;
-            float ring = (dn - r) / 0.08f;
-            float beat = 0.55f + 0.45f * (float) Math.sin(t * (6f + pc * 14f));
-            c = lerp(c, PULSE, (float) Math.exp(-ring * ring) * 0.95f * beat);
-            c = lerp(c, 0xFFFFFF, pc * pc * (float) Math.exp(-(dn * dn) / 0.01f));
-        }
-        float pe = (now - LightState.pulseAt) / 1000f;
-        if (LightState.pulseAt > 0L && 1.3f > pe && pe >= 0f) {
-            float fade = 1f - pe / 1.3f;
-            float ring = (dn - pe * 1.5f) / 0.16f;
-            float echo = (dn - (pe - 0.25f) * 1.5f) / 0.08f;
-            float v = (float) Math.exp(-ring * ring) * fade;
-            if (pe > 0.25f) v = Math.max(v, (float) Math.exp(-echo * echo) * fade * 0.5f);
-            if (0.12f > pe) v = Math.max(v, 1f - pe / 0.12f);
-            c = lerp(c, lerp(PULSE, 0xFFFFFF, v), v);
-        }
-
-        // transverse jump: purple tendrils close in on the middle
-        if (jumpLevel > 0.001f) {
-            float L = jumpLevel;
-            float th = (float) Math.atan2(dy, dx);
-            float arms = 0.5f + 0.5f * (float) Math.sin(th * 6f + dn * 9f - t * 2.6f);
-            float front = 1.05f - L * 1.1f;
-            float m = clamp01((dn - front + arms * 0.22f) / 0.1f);
-            int col = lerp(TENDRIL_DARK, TENDRIL, arms * (0.6f + 0.4f * (float) Math.sin(t * 4f + dn * 6f)));
-            float tip = (dn - front - arms * 0.05f) / 0.07f;
-            col = lerp(col, TENDRIL_TIP, (float) Math.exp(-tip * tip) * arms);
-            c = lerp(scale(c, 1f - 0.6f * L), col, m);
-        }
+        // (sensor burst, interdiction pulse and jump tendrils are drawn last, over everything: see abilityRings)
         return c;
     }
 
@@ -421,6 +508,12 @@ public class Renderer {
         // flicker speed grows with damage
         int bucket = (int) (t * (5f + damage * 20f));
 
+        // overload crackle: 30 flickers a second at the start, slowing to ~2 as it runs out
+        float total = LightState.overloadTotal;
+        float leftShare = total > 0f ? clamp01(LightState.overloadLeft / total) : 1f;
+        overloadHealed = 1f - leftShare;
+        overloadClock += Math.min(dt, 0.1f) * (2f + 28f * leftShare * leftShare);
+
         for (int d = 0; d < Devices.COUNT; d++) {
             int[] a = frame[d];
             float[] xs = Devices.X[d];
@@ -439,9 +532,10 @@ public class Renderer {
                 else if (sysType == LightState.SYS_TELEPORT) c = teleport(c, d, i, xs[i], y, t, sysOn, sinceOn, ended, sinceEnd);
 
                 if (ship && fresh && LightState.overloaded) {
-                    // electric crackle
-                    float r = rand(d * 131 + i, bucket * 3 + (int) (t * 30f));
-                    c = r > 0.55f ? lerp(0x9FD8FF, 0xFFFFFF, r) : scale(c, 0.25f);
+                    // electric crackle that slows down, thins out and lets the board come back as
+                    // the overload wears off, like the systems are fixing themselves
+                    float r = rand(d * 131 + i, (int) overloadClock);
+                    c = r > 0.55f + 0.35f * overloadHealed ? lerp(0x9FD8FF, 0xFFFFFF, r) : scale(c, 0.25f + 0.7f * overloadHealed);
                 } else if (ship && fresh && LightState.venting) {
                     c = scale(c, 0.65f + 0.35f * (float) Math.sin(t * 14f + y * 6f));
                 }
@@ -456,11 +550,45 @@ public class Renderer {
                 a[i] = c;
             }
         }
+        flameLevel = approach(flameLevel, ship && fresh && LightState.flamedOut ? 1f : 0f, dt / 0.25f, dt / 0.6f);
+        if (flameLevel > 0.001f) flameout(t);
         if (ship && 0.30f >= LightState.cr) crAlarm(LightState.cr, t);
         if (ship) gauges(sysType, sysOn, t);
     }
 
-    public static final int CR_YELLOW = 0xFFC800, CR_RED = 0xFF1000;
+    public static final int FLAMEOUT_RED = 0xFF1400;
+    /** seconds for one side to go off -> red -> back to normal */
+    static final float FLAMEOUT_CYCLE = 1.6f;
+    private float flameLevel;
+
+    /**
+     * engines flamed out: two zones at the bottom left and bottom right of the main keyboard block
+     * take turns. While one glows red the other goes dark; then the dark one rises to red while the
+     * red one fades back to its normal colour, and so on.
+     */
+    private void flameout(float t) {
+        int[] kb = frame[Devices.KEYBOARD];
+        for (int row = 3; 5 >= row; row++) {
+            float rowW = row == 3 ? 0.45f : 1f;
+            for (int col = 0; 14 >= col; col++) {
+                float left = 3 >= col ? 1f : (col == 4 ? 0.5f : 0f);
+                float right = col >= 11 ? 1f : (col == 10 ? 0.5f : 0f);
+                float m = Math.max(left, right) * rowW;
+                if (0f >= m) continue;
+                int i = row * 22 + col;
+                float u = frac(t / FLAMEOUT_CYCLE + (left > 0f ? 0f : 0.5f));
+                int base = kb[i];
+                int c;
+                if (0.4f > u) c = lerp(0x000000, FLAMEOUT_RED, smooth(u / 0.4f));          // dark -> red
+                else if (0.5f > u) c = FLAMEOUT_RED;                                     // hold red
+                else if (0.9f > u) c = lerp(FLAMEOUT_RED, base, smooth((u - 0.5f) / 0.4f)); // red -> normal
+                else c = lerp(base, 0x000000, smooth((u - 0.9f) / 0.1f));                // normal -> dark
+                kb[i] = lerp(base, c, m * flameLevel);
+            }
+        }
+    }
+
+    public static final int CR_YELLOW = 0xFFFF00, CR_RED = 0xFF1000;
     static final boolean[] KB_OUTLINE = new boolean[6 * 22];
     static {
         for (int r = 0; 6 > r; r++) {
@@ -686,6 +814,11 @@ public class Renderer {
         return c;
     }
 
+    /** keyboard centre for the explosion, sensor burst and interdiction pulse: the middle of the letter keys (column 7.5 = G/H, row 3 = home row),
+     *  not the middle of the whole 22-column grid, which sits over the right side of the main block */
+    public static final float MID_KEYS_X = 7.5f / 21f;
+    public static final float MID_KEYS_Y = 1f - 3f / 5f;
+
     /** flagship destroyed: white flash, fire ring from the middle, embers, then dark except Tab */
     private void renderDeath(float since, float t) {
         float life = since / EXPLOSION_SECONDS;
@@ -695,11 +828,15 @@ public class Renderer {
             float[] xs = Devices.X[d];
             float[] ys = Devices.Y[d];
             float aspect = Devices.ASPECT[d];
+            float cx = d == Devices.KEYBOARD ? MID_KEYS_X : 0.5f;
+            float cy = d == Devices.KEYBOARD ? MID_KEYS_Y : 0.5f;
+            // the ring has further to go from an off-centre start: scale by the farthest corner
+            float reach = Math.max(1f, Math.max(cx, 1f - cx) * 2f);
             for (int i = 0; i < a.length; i++) {
                 if (life >= 1f) { a[i] = 0; continue; }
-                float dx = (xs[i] - 0.5f) * aspect;
-                float dy = ys[i] - 0.5f;
-                float dist = (float) Math.sqrt(dx * dx + dy * dy) / Math.max(1f, aspect * 0.5f);
+                float dx = (xs[i] - cx) * aspect;
+                float dy = ys[i] - cy;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy) / Math.max(1f, aspect * 0.5f) / reach;
                 float ring = (dist - radius) / 0.12f;
                 float heat = (float) Math.exp(-ring * ring);
                 // embers left behind the ring
@@ -713,11 +850,12 @@ public class Renderer {
             }
         }
         if (life >= 0.85f) {
-            // the command screen key stays lit
+            // the command screen key (Tab) and X stay lit
             float pulse = 0.65f + 0.35f * (float) Math.sin(t * 2.5f);
             float in = Math.min(1f, (life - 0.85f) / 0.15f);
-            frame[Devices.KEYBOARD][Devices.keyIndex(Devices.KEY_TAB)] = scale(Config.ready, pulse * in);
-            if (life >= 1f) frame[Devices.KEYBOARD][Devices.keyIndex(Devices.KEY_TAB)] = scale(Config.ready, pulse);
+            int c = scale(Config.ready, life >= 1f ? pulse : pulse * in);
+            frame[Devices.KEYBOARD][Devices.keyIndex(Devices.KEY_TAB)] = c;
+            frame[Devices.KEYBOARD][Devices.keyIndex(Devices.KEY_X)] = c;
         }
     }
 

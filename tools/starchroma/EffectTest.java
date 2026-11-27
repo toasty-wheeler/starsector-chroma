@@ -44,7 +44,7 @@ public class EffectTest {
             "campaign: 1,3 ready, 2 used, 4 just ready", "combat start", "shields rising (0.7 s)", "shields up, 50% flux",
             "100% flux, no shields", "phase cloak", "hull 60%", "hull 20%", "overloaded",
             "explosion 0.3 s", "explosion 0.9 s", "explosion 1.8 s", "after explosion"};
-        int cellW = 760, cellH = 300;
+        int cellW = 560, cellH = 190;
         BufferedImage img = new BufferedImage(cellW * 2, cellH * ((names.length + 1) / 2), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();
         g.setColor(new Color(24, 24, 28));
@@ -109,7 +109,8 @@ public class EffectTest {
             "transverse jump 40%", "transverse jump 100%", "jumped: receding 0.15 s", "jumped: receding 0.3 s",
             "neutrino 2.2 s (bright breath)", "keys 2+4 toggled on (yellow); numpad + nav full", "fleet hull 45%: nav yellow", "fleet hull 20%: nav red, supplies 10%",
             "under a week of supplies: yellow flash", "fuel under 20%: red flash", "both low: alternating (yellow beat)", "both low: alternating (red beat)",
-            "holding S: red ripples", "neutrino +3 s (other stars)"};
+            "holding S: red ripples", "neutrino +3 s (other stars)",
+            "deep space: dark, buttons flickering", "deep space +0.37 s"};
         int cellW = 560, cellH = 190;
         BufferedImage img = new BufferedImage(cellW * 2, cellH * ((names.length + 1) / 2), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();
@@ -123,6 +124,7 @@ public class EffectTest {
             grid(g, f[Devices.KEYBOARD], 6, 22, ox + 12, oy + 28, 22, 2);
         }
         g.dispose();
+        LightState.abyss = 0f; // the deep space scenes leave it set
         File file = new File(out, "campaign.png");
         ImageIO.write(img, "png", file);
         System.out.println("wrote " + file);
@@ -153,6 +155,7 @@ public class EffectTest {
         LightState.fleetCR = -1f;
         LightState.fleetHull = -1f;
         LightState.supplyDays = -1f;
+        LightState.abyss = 0f;
         if (s >= 21) {
             LightState.supplies = 0.7f;
             LightState.fuel = 0.5f;
@@ -170,6 +173,8 @@ public class EffectTest {
             case 26: LightState.supplyDays = 5f; LightState.fuel = 0.15f; return r.render(t0 + 2400);
             case 27: LightState.supplyDays = 5f; LightState.fuel = 0.15f; return r.render(t0 + 800);
             case 28: LightState.slowMoving = true; return r.render(t0 + 1000);
+            case 30: LightState.abyss = 0.5f; LightState.fleetHull = 1f; return run(r, t0, 3000);
+            case 31: LightState.abyss = 0.5f; LightState.fleetHull = 1f; return run(r, t0, 3370);
             case 29: { LightState.neutrino = true; int[][] f = null; for (long ms = 0; 5300 >= ms; ms += 40) f = r.render(t0 + ms); return f; }
             case 0: return r.render(t0);
             case 1: return r.render(t0 + 2244);
@@ -207,19 +212,7 @@ public class EffectTest {
     }
 
     static void draw(Graphics2D g, int[][] f, int x, int y) {
-        grid(g, f[Devices.KEYBOARD], 6, 22, x, y, 22, 2);
-        grid(g, f[Devices.MOUSE], 9, 7, x + 520, y, 14, 2);
-        grid(g, f[Devices.KEYPAD], 4, 5, x + 640, y, 16, 2);
-        // mousepad drawn around a rectangle in LED order
-        int px = x, py = y + 150, pw = 200, ph = 100;
-        for (int i = 0; i < 15; i++) {
-            int lx = px + (int) (Devices.X[Devices.MOUSEPAD][i] * pw);
-            int ly = py + (int) ((1f - Devices.Y[Devices.MOUSEPAD][i]) * ph);
-            g.setColor(new Color(f[Devices.MOUSEPAD][i]));
-            g.fillRect(lx, ly, 14, 14);
-        }
-        grid(g, f[Devices.HEADSET], 1, 5, x + 260, y + 170, 22, 3);
-        grid(g, f[Devices.CHROMALINK], 1, 5, x + 260, y + 210, 22, 3);
+        grid(g, f[Devices.KEYBOARD], 6, 22, x, y, 22, 2); // previews show the keyboard only
     }
 
     static void grid(Graphics2D g, int[] c, int rows, int cols, int x, int y, int size, int gap) {
@@ -237,9 +230,10 @@ public class EffectTest {
         "burn drive ready (F light blue)", "burn drive on 0.6 s", "burn drive recharging (F red)",
         "phase skimmer: collapse 0.2 s", "phase teleporter: in transit", "teleport: reappear 0.25 s after",
         "phase cloak (system) 1.5 s", "accelerated ammo feeder 1 s", "other system (damper) 1 s",
-        "instant skimmer: burst 0.3 s", "hull 50%: red/orange alarm keys", "mouse sides: ammo 60% / skimmer 1 of 3 + reloading",
-        "mouse sides: ammo 15% (low) / cooldown half way", "overload while ship gone (must be plain)",
-        "crew readiness 25%: yellow outline", "crew readiness 10%: red outline"};
+        "instant skimmer: burst 0.3 s", "hull 50%: red/orange alarm keys", "numpad: ammo 60% / skimmer 1 of 3 + reloading",
+        "numpad: ammo 15% (low) / cooldown half way", "overload while ship gone (must be plain)",
+        "crew readiness 25%: yellow outline", "crew readiness 10%: red outline",
+        "flameout: left red, right dark", "flameout: left back to normal, right rising"};
     // type, on from ms, on until ms, render at ms
     static final int[][] SYS_SCENES = {
         {LightState.SYS_CHARGE, -1, -1, 400},
@@ -257,7 +251,9 @@ public class EffectTest {
         {LightState.SYS_CHARGE, -1, -1, 400},
         {LightState.SYS_NONE, -1, -1, 400},
         {LightState.SYS_NONE, -1, -1, 1250},
-        {LightState.SYS_NONE, -1, -1, 715}};
+        {LightState.SYS_NONE, -1, -1, 715},
+        {LightState.SYS_NONE, -1, -1, 1560},
+        {LightState.SYS_NONE, -1, -1, 1920}};
 
     static int[][] sysScene(Renderer r, int s, long t0) {
         LightState.resetCombat();
@@ -284,6 +280,7 @@ public class EffectTest {
                 case 13: LightState.overloaded = true; LightState.hasShip = false; break;
                 case 14: LightState.cr = 0.25f; break;
                 case 15: LightState.cr = 0.10f; break;
+                case 16: case 17: LightState.flamedOut = true; break;
                 default: break;
             }
             f = r.render(t0 + ms);
@@ -292,7 +289,7 @@ public class EffectTest {
     }
 
     static void systemSheet(File out) throws Exception {
-        int cellW = 760, cellH = 300;
+        int cellW = 560, cellH = 190;
         BufferedImage img = new BufferedImage(cellW * 2, cellH * ((SYS_NAMES.length + 1) / 2), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();
         g.setColor(new Color(24, 24, 28));
@@ -324,6 +321,8 @@ public class EffectTest {
         expect("key 2 used = red (" + Integer.toHexString(u) + ")", ((u >> 16) & 255) > 150 && 40 > ((u >> 8) & 255) && 40 > (u & 255));
         check("tab = light blue", f[0][kbTab], Config.ready);
         check("D = light blue", f[0][Devices.keyIndex(Devices.KEY_D)], Config.ready);
+        check("C = light blue", f[0][Devices.keyIndex(Devices.KEY_C)], Config.ready);
+        expect("X not lit as a hotkey", !near(f[0][4 * 22 + 4], Config.ready));
         expect("S not lit as a hotkey", !near(f[0][Devices.keyIndex(Devices.KEY_S)], Config.ready));
         check("F2 (codex) = light blue", f[0][Devices.keyIndex(Devices.KEY_F2)], Config.ready);
         check("F4 (quicksave) = light blue", f[0][Devices.keyIndex(Devices.KEY_F4)], Config.ready);
@@ -344,7 +343,42 @@ public class EffectTest {
         expect("after explosion: tab lit", f[0][kbTab] != 0);
         int lit = 0;
         for (int d = 0; d < Devices.COUNT; d++) for (int i = 0; i < f[d].length; i++) if (f[d][i] != 0) lit++;
-        expect("after explosion: only tab lit (" + lit + ")", lit == 1);
+        expect("after explosion: X lit", f[0][Devices.keyIndex(Devices.KEY_X)] != 0);
+        expect("after explosion: only tab and X lit (" + lit + ")", lit == 2);
+
+        // overload: crackle flickers fast at the start, slow and sparse near the end
+        int[] early = overloadFlicker(1f), late = overloadFlicker(0.08f);
+        expect("overload start: lots of flicker (" + early[0] + " changes, " + early[1] + " sparks)", early[0] > 40);
+        expect("overload end: slow flicker (" + late[0] + " changes vs " + early[0] + ")", early[0] > late[0] * 4);
+        expect("overload end: fewer sparks (" + late[1] + " vs " + early[1] + ")", early[1] > late[1]);
+
+        // letting go of S: ripples finish spreading, then stop
+        Renderer rs = new Renderer();
+        long ts = 3600000L * 10;
+        campaignScene(rs, 28);
+        LightState.slowMoving = false;
+        int redSoon = redNearS(run(rs, ts + 1040, 260)[0]);
+        int redLate = redNearS(run(rs, ts + 1340, 1900)[0]);
+        expect("S released: ripples still spreading (" + redSoon + " red keys)", redSoon > 0);
+        expect("S released: ripples gone later (" + redLate + ")", redLate == 0);
+
+        // deep space: background black, the buttons flicker
+        Renderer ra = new Renderer();
+        campaignScene(ra, 30);
+        int bgKey = 4 * 22 + 9, tabKey = Devices.keyIndex(Devices.KEY_TAB);
+        int maxBg = 0, tabOn = 0, tabDim = 0;
+        for (long ms = 3000; 6000 >= ms; ms += 40) {
+            int[] kb = ra.render(ts + ms)[0];
+            maxBg = Math.max(maxBg, Math.max((kb[bgKey] >> 16) & 255, Math.max((kb[bgKey] >> 8) & 255, kb[bgKey] & 255)));
+            int b = kb[tabKey] & 255;
+            if (b > 200) tabOn++;
+            else if (60 > b) tabDim++;
+        }
+        expect("deep space: background black (max " + maxBg + ")", 10 > maxBg);
+        expect("deep space: Tab flickers (" + tabOn + " on, " + tabDim + " dim)", tabOn > 10 && tabDim > 5);
+        LightState.abyss = 0f;
+        int[] back = run(ra, ts + 6000, 2500)[0];
+        expect("left deep space: background back", ((back[bgKey] & 255) + ((back[bgKey] >> 8) & 255)) > 40);
 
         String json = ChromaClient.encode(Devices.KEYBOARD, new int[132]);
         expect("keyboard json shape", json.startsWith("{\"effect\":\"CHROMA_CUSTOM\",\"param\":[[0,") && json.endsWith("0]]}"));
@@ -387,6 +421,11 @@ public class EffectTest {
         check("CR 25%: inner key untouched", f[0][3 * 22 + 8], Config.combatWhite);
         f = sysScene(new Renderer(), 15, 100000L);
         check("CR 10%: number row red", f[0][1 * 22 + 6], Renderer.CR_RED);
+        f = sysScene(new Renderer(), 16, 100000L);
+        int fl = f[0][5 * 22 + 1], fr2 = f[0][5 * 22 + 13];
+        expect("flameout: bottom left red (" + Integer.toHexString(fl) + ")", ((fl >> 16) & 255) > 200 && 60 > ((fl >> 8) & 255));
+        expect("flameout: bottom right dark (" + Integer.toHexString(fr2) + ")", 80 > ((fr2 >> 16) & 255) + ((fr2 >> 8) & 255) / 3 && 80 > (fr2 & 255));
+        expect("flameout: middle keys untouched", near(f[0][5 * 22 + 7], Config.combatWhite));
         f = sysScene(new Renderer(), 1, 100000L);
         expect("full CR: no outline", near(f[0][5 * 22 + 1], Config.combatWhite) || f[0][5 * 22 + 1] != Renderer.CR_YELLOW);
         f = sysScene(new Renderer(), 11, 100000L);
@@ -419,6 +458,42 @@ public class EffectTest {
             int got = LightState.classifySystem(ids[k][0]);
             expect("system " + ids[k][0] + " -> " + ids[k][1] + " (got " + got + ")", got == Integer.parseInt(ids[k][1]));
         }
+    }
+
+    /** {keyboard keys that changed over 0.5 s of 40 ms frames, bright spark keys in the last frame} with share of the overload left */
+    static int[] overloadFlicker(float leftShare) {
+        LightState.resetCombat();
+        LightState.mode = LightState.COMBAT;
+        LightState.hasShip = true;
+        LightState.flux = 1f;
+        LightState.overloaded = true;
+        LightState.overloadTotal = 10f;
+        LightState.overloadLeft = 10f * leftShare;
+        Renderer r = new Renderer();
+        long t0 = 100000L;
+        int[] prev = (int[]) r.render(t0)[0].clone();
+        int changes = 0;
+        int[] cur = prev;
+        for (long ms = 40; 500 >= ms; ms += 40) {
+            cur = (int[]) r.render(t0 + ms)[0].clone();
+            for (int i = 0; i < cur.length; i++) if (cur[i] != prev[i]) changes++;
+            prev = cur;
+        }
+        int sparks = 0;
+        for (int i = 0; i < cur.length; i++) if (((cur[i] & 255)) > 0xE0 && ((cur[i] >> 16) & 255) > 0x90) sparks++;
+        return new int[] {changes, sparks};
+    }
+
+    /** red keys in rows 2..5, columns 0..10 (around S, away from the ability-bar digits) */
+    static int redNearS(int[] kb) {
+        int n = 0;
+        for (int row = 2; 5 >= row; row++) {
+            for (int col = 0; 10 >= col; col++) {
+                int c = kb[row * 22 + col];
+                if (((c >> 16) & 255) > 120 && 70 > ((c >> 8) & 255) && 70 > (c & 255)) n++;
+            }
+        }
+        return n;
     }
 
     static boolean near(int a, int b) {

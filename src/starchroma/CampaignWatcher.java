@@ -6,6 +6,7 @@ import com.fs.starfarer.api.EveryFrameScript;
 import com.fs.starfarer.api.GameState;
 import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.campaign.CampaignFleetAPI;
+import com.fs.starfarer.api.campaign.CampaignUIAPI;
 import com.fs.starfarer.api.campaign.CargoAPI;
 import com.fs.starfarer.api.fleet.FleetLogisticsAPI;
 import com.fs.starfarer.api.fleet.FleetMemberAPI;
@@ -14,6 +15,8 @@ import com.fs.starfarer.api.campaign.PersistentUIDataAPI.AbilitySlotAPI;
 import com.fs.starfarer.api.campaign.PersistentUIDataAPI.AbilitySlotsAPI;
 import com.fs.starfarer.api.characters.AbilityPlugin;
 import com.fs.starfarer.api.loading.AbilitySpecAPI;
+import com.fs.starfarer.api.util.Misc;
+import org.lwjgl.input.Keyboard;
 
 /** Reads the fleet's abilities every frame in the campaign and publishes them for the lighting thread. */
 public class CampaignWatcher implements EveryFrameScript {
@@ -23,6 +26,7 @@ public class CampaignWatcher implements EveryFrameScript {
     private float lastSensor, lastPulse;
     private LocationAPI lastLocation;
     private long jumpSeenAt;
+    private int slowKey;
 
     public boolean isDone() { return false; }
 
@@ -41,6 +45,14 @@ public class CampaignWatcher implements EveryFrameScript {
         }
     }
 
+    /** deep space: the dark abyssal edge of hyperspace, or one of the abyssal star systems out there */
+    private static float abyssDepth(CampaignFleetAPI fleet) {
+        LocationAPI loc = fleet.getContainingLocation();
+        if (loc != null && loc.hasTag("system_abyssal")) return 1f;
+        if (!fleet.isInHyperspace()) return 0f;
+        return Math.max(0f, Math.min(1f, Misc.getAbyssalDepth(fleet)));
+    }
+
     private void readFleet(CampaignFleetAPI fleet) {
         long now = System.currentTimeMillis();
 
@@ -49,11 +61,14 @@ public class CampaignWatcher implements EveryFrameScript {
         if (busy(fleet.getAbility("emergency_burn"))) move = LightState.MOVE_EMERGENCY;
         else if (on(fleet.getAbility("sustained_burn"))) move = LightState.MOVE_SUSTAINED;
         else if (on(fleet.getAbility("go_dark"))) move = LightState.MOVE_SILENT;
-        LightState.slowMoving = fleet.wasSlowMoving();
+        // ripples only while the move-slowly key itself is held: Go Dark, sensor burst, interdiction
+        // pulse and standing still all make the fleet "move slowly" too
+        LightState.slowMoving = slowKeyDown();
         LightState.burnLevel = Math.max(0f, Math.min(1f, fleet.getCurrBurnLevel() / 20f));
         LightState.move = move;
 
         LightState.neutrino = on(fleet.getAbility("gravitic_scan"));
+        LightState.abyss = abyssDepth(fleet);
 
         // active sensor burst: charge, then a ring when it goes off. The "gone off" window can be
         // shorter than a frame (interdiction pulse lasts 0.001 days), so a charge that was nearly
@@ -118,6 +133,23 @@ public class CampaignWatcher implements EveryFrameScript {
         }
         LightState.fleetCR = n > 0 ? cr / n : -1f;
         LightState.fleetHull = n > 0 ? hull / n : -1f;
+    }
+
+    /** the key bound to "move slowly" (S by default), held down on the campaign map */
+    private boolean slowKeyDown() {
+        if (slowKey == 0) {
+            slowKey = Keyboard.KEY_S;
+            try {
+                String name = Global.getSettings().getControlStringForEnumName("GO_SLOW");
+                int k = name != null ? Keyboard.getKeyIndex(name.trim().toUpperCase()) : 0;
+                if (k > 0) slowKey = k;
+            } catch (Throwable t) {
+                // keep S
+            }
+        }
+        CampaignUIAPI ui = Global.getSector().getCampaignUI();
+        if (ui != null && (ui.isShowingDialog() || ui.isShowingMenu() || ui.getCurrentCoreTab() != null)) return false;
+        return Keyboard.isKeyDown(slowKey);
     }
 
     private static boolean on(AbilityPlugin ab) {

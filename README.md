@@ -31,10 +31,11 @@ Rendered by `sh build.sh test` (keyboard, mouse, keypad, mousepad, headset, Chro
   - Both follow your burn level: at a standstill they look like normal travel, and as the fleet speeds up the burn effect fades in and its star field moves faster, reaching full strength and speed at burn 20.
 - Abilities add their own effects on top:
   - **Neutrino Detector**: a steady blue outline around the keyboard that weaves in and out (reaching about a row deeper at its crests), while the middle goes dark with stars slowly twinkling on random keys.
-  - **Holding S** (moving slowly): small red ripples spread out from the S key.
-  - **Active Sensor Burst**: light gathers in the middle while it charges, then a white ring expands outward.
-  - **Interdiction Pulse**: the keyboard dims and a ring closes in, ticking faster as it charges, then a bright pulse and an echo blast outward.
-  - **Transverse Jump**: purple and dark purple tendrils close in on the middle while it charges, and snap back once the jump goes through.
+  - **Holding S** (move slowly): a single red wave spreads out from the S key (a new one every 1.4 s, the first the moment the key goes down), passing over the lit hotkeys too, only while the key is held on the campaign map (not when the fleet slows for Go Dark, a sensor burst, an interdiction pulse or standing still). Let go and the wave already out finishes spreading and fades.
+  - **Active Sensor Burst**: light gathers in the middle (on the keyboard: the middle of the letter keys, G/H) while it charges, then a white ring expands outward, over the lit hotkeys and everything else.
+  - **Interdiction Pulse**: the keyboard dims and a ring closes in on the middle of the letter keys, ticking faster as it charges, then a bright pulse and an echo blast outward. Drawn over the hotkeys too.
+  - **Transverse Jump**: purple and dark purple tendrils close in on the middle of the letter keys while it charges, and snap back once the jump goes through. They cover the hotkeys too.
+  - **Deep space** (the abyssal edge of hyperspace and the abyssal star systems out there): the keyboard goes black and the lit buttons flicker on and off at random, like failing lights. Abilities still draw on the dark keyboard. It fades back when you leave.
 - Set `starchroma_baseMode` to `spectrum`, `wave` or `static` for a fixed background instead.
 - Keys **1–0** match the ability bar: light blue = ready, yellow slowly cycling to white-yellow = a toggle that is switched on (Transponder, Neutrino Detector, Go Dark, Sustained Burn...), red (slow pulse) = charging, cooling down or not usable right now. Each key flashes white when its ability is ready again. Empty slots show the background.
 - **Tab** (map), **E** (intel), **C**, **D**, **F**, **R**, **I**, **F2** (codex), **F4** (quicksave) and **F5** (quickload) glow light blue.
@@ -59,8 +60,9 @@ Rendered by `sh build.sh test` (keyboard, mouse, keypad, mousepad, headset, Chro
 - Low crew readiness (combat readiness, CR) on your flagship: the outline of the keyboard and the mousepad blink yellow at 30% CR or less, and faster red at 15% or less. The keyboard outline traces both the outer edge of a full-size board and the main typing block, so 60% and TKL boards (Huntsman Mini) get a complete frame.
 - Mouse side strips: the left side is an ammo gauge for the selected weapon group (or all ammo weapons if that group has none), brass, turning pulsing red below 25% and blinking red when empty. The right side shows the ship system: its charges stacked from the bottom in light blue with the reloading one in dim red, or for systems without charges, light blue when ready, the system's colour while on, and a red bar refilling during cooldown.
 - Numpad (full-size keyboards): split into two bars that fill from the bottom, ammo on the left half (Num Lock, 7, 4, 1, 0 side) and the ship system charges / cooldown on the right half, coloured the same way as the mouse sides. The mouse wheel and logo show the ship system like the F key: light blue ready, its colour while on, red while recharging.
-- Overload: electric white-blue crackle. Venting: fast pulsing.
-- Flagship destroyed: a white flash, a ring of fire expanding from the middle of each device, embers, then total darkness except **Tab** (command screen), which pulses light blue. Taking command of another ship brings the lights back.
+- Overload: electric white-blue crackle that slows down, thins out and lets the board come back as the overload wears off, like the ship is fixing itself. Venting: fast pulsing.
+- Engine flameout: the bottom-left and bottom-right corners of the main keyboard take turns. One side glows red while the other is dark, then the dark side turns red and the red side fades back to normal, until the engines relight.
+- Flagship destroyed: a white flash, a ring of fire expanding from the middle of the letter keys (G/H) on the keyboard and from the middle of every other device, embers, then total darkness except **Tab** (command screen) and **X**, which pulse light blue. Taking command of another ship brings the lights back.
 
 On the title screen and when you quit, the mod releases Chroma and your normal Synapse lighting comes back.
 

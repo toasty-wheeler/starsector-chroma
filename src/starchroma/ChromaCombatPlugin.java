@@ -9,6 +9,7 @@ import com.fs.starfarer.api.combat.CombatEngineAPI;
 import com.fs.starfarer.api.combat.FluxTrackerAPI;
 import com.fs.starfarer.api.combat.ShieldAPI;
 import com.fs.starfarer.api.combat.ShipAPI;
+import com.fs.starfarer.api.combat.ShipEngineControllerAPI;
 import com.fs.starfarer.api.combat.ShipSystemAPI;
 import com.fs.starfarer.api.combat.WeaponAPI;
 import com.fs.starfarer.api.combat.WeaponGroupAPI;
@@ -71,7 +72,10 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
             LightState.hasShip = false;
             LightState.systemOn = false;
             LightState.overloaded = false;
+            LightState.overloadLeft = 0f;
+            LightState.overloadTotal = 0f;
             LightState.venting = false;
+            LightState.flamedOut = false;
             LightState.ammo = -1f;
             systemWasOn = false;
             return;
@@ -81,7 +85,13 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
         LightState.flux = flux != null ? flux.getFluxLevel() : 0f;
         // isOverloaded() can lag behind; trust the remaining overload time too
         LightState.overloaded = flux != null && flux.isOverloaded() && flux.getOverloadTimeRemaining() > 0f;
+        // how far through the overload we are: the crackle slows down as it wears off
+        float left = LightState.overloaded ? flux.getOverloadTimeRemaining() : 0f;
+        LightState.overloadTotal = LightState.overloaded ? Math.max(LightState.overloadTotal, left) : 0f;
+        LightState.overloadLeft = left;
         LightState.venting = flux != null && flux.isVenting();
+        ShipEngineControllerAPI eng = tracked.getEngineController();
+        LightState.flamedOut = eng != null && (eng.isFlamedOut() || eng.isFlamingOut());
         LightState.ammo = readAmmo(tracked);
         LightState.cr = tracked.getCurrentCR();
         LightState.hull = tracked.getHullLevel();

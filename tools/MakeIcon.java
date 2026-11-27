@@ -1,12 +1,11 @@
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.LinearGradientPaint;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.Shape;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
-import java.awt.geom.GeneralPath;
 import java.awt.geom.Line2D;
 import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
@@ -18,15 +17,19 @@ import javax.imageio.ImageIO;
 
 /**
  * Draws icon.png (256 x 256, shown by mod managers such as TriOS): a dark space tile with a
- * glowing rainbow (Chroma-style) outline, and a top-down warship in the middle painted in a
- * rainbow sweep, with engine glow.
+ * glowing rainbow (Chroma-style) outline, and the outline of a ship sprite turned 45 degrees,
+ * glowing in a rainbow sweep from nose to tail, with engine glow.
  *
- * Usage: MakeIcon <output png>
+ * Usage: MakeIcon <ship sprite png> <output png>   (e.g. MakeIcon tools/ship.png icon.png)
  */
 public class MakeIcon {
 
+    static final int S = 256;
+    /** supersampling for the traced outline */
+    static final int K = 3;
+
     public static void main(String[] args) throws Exception {
-        int S = 256;
+        BufferedImage sprite = ImageIO.read(new File(args[0]));
         BufferedImage img = new BufferedImage(S, S, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -62,73 +65,158 @@ public class MakeIcon {
         g.setColor(new Color(255, 255, 255, 90));
         g.draw(ring);
 
-        // ship
-        GeneralPath ship = shipShape();
-        Color[] rainbow = new Color[] {
-            hue(0.00f), hue(0.10f), hue(0.18f), hue(0.33f), hue(0.50f), hue(0.62f), hue(0.78f), hue(0.90f)};
-        float[] stops = new float[] {0f, 0.14f, 0.28f, 0.42f, 0.56f, 0.70f, 0.85f, 1f};
+        // ---- ship: silhouette of the sprite, nose turned to the top right
+        int[] box = opaqueBounds(sprite);
+        float bw = box[2] - box[0] + 1, bh = box[3] - box[1] + 1;
+        float cx = box[0] + bw / 2f, cy = box[1] + bh / 2f;
+        float scale = 196f / ((bw + bh) * 0.7071f);
+        AffineTransform at = new AffineTransform();
+        at.translate(S / 2f, S / 2f + 2f);
+        at.rotate(Math.PI / 4);
+        at.scale(scale, scale);
+        at.translate(-cx, -cy);
 
-        // engine plumes behind the ship
-        glow(g, 111, 212, 22, 0x7FE8FF);
-        glow(g, 145, 212, 22, 0x7FE8FF);
-        // coloured glow around the hull
-        g.setPaint(new LinearGradientPaint(70, 44, 186, 206, stops, translucent(rainbow, 70)));
-        g.setStroke(new BasicStroke(14f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.draw(ship);
-        g.setStroke(new BasicStroke(7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.setPaint(new LinearGradientPaint(70, 44, 186, 206, stops, translucent(rainbow, 110)));
-        g.draw(ship);
+        int W = S * K;
+        BufferedImage big = new BufferedImage(W, W, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D bg = big.createGraphics();
+        bg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        AffineTransform bt = AffineTransform.getScaleInstance(K, K);
+        bt.concatenate(at);
+        bg.drawImage(sprite, bt, null);
+        bg.dispose();
 
-        // hull in a rainbow sweep
-        g.setPaint(new LinearGradientPaint(70, 44, 186, 206, stops, rainbow));
-        g.fill(ship);
-        // shading: lighter spine, darker wing tips
-        g.setClip(ship);
-        g.setPaint(new LinearGradientPaint(44, 0, 212, 0, new float[] {0f, 0.5f, 1f},
-            new Color[] {new Color(0, 0, 0, 110), new Color(255, 255, 255, 70), new Color(0, 0, 0, 110)}));
-        g.fill(ship);
-        g.setClip(null);
+        // smooth the pixel-art stair steps, then threshold to a clean silhouette
+        float[] a = new float[W * W];
+        for (int i = 0; i < a.length; i++) a[i] = ((big.getRGB(i % W, i / W) >>> 24) & 255) / 255f;
+        blur(a, W, W, K);
+        boolean[] in = new boolean[a.length];
+        for (int i = 0; i < a.length; i++) in[i] = a[i] > 0.5f;
 
-        // panel lines
-        g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.setColor(new Color(10, 10, 20, 150));
-        g.draw(new Line2D.Float(128, 70, 128, 184));
-        g.draw(new Line2D.Float(146, 118, 196, 160));
-        g.draw(new Line2D.Float(110, 118, 60, 160));
-        g.draw(new Line2D.Float(140, 150, 152, 176));
-        g.draw(new Line2D.Float(116, 150, 104, 176));
-        // dark hull outline
-        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g.setColor(new Color(8, 8, 16, 200));
-        g.draw(ship);
+        // outline band: pixels within R of the silhouette edge (both sides)
+        float R = 1.25f * K;
+        int ri = (int) Math.ceil(R);
+        float[] band = new float[S * S];
+        float[] fill = new float[S * S];
+        float sub = 1f / (K * K);
+        for (int y = 0; y < W; y++) {
+            for (int x = 0; x < W; x++) {
+                boolean me = in[y * W + x];
+                boolean edge = false;
+                for (int dy = -ri; ri >= dy && !edge; dy++) {
+                    int yy = y + dy;
+                    if (0 > yy || yy >= W) continue;
+                    for (int dx = -ri; ri >= dx; dx++) {
+                        if (dx * dx + dy * dy > R * R) continue;
+                        int xx = x + dx;
+                        if (0 > xx || xx >= W) continue;
+                        if (in[yy * W + xx] != me) {
+                            edge = true;
+                            break;
+                        }
+                    }
+                }
+                int o = (y / K) * S + (x / K);
+                if (edge) band[o] += sub;
+                if (me) fill[o] += sub;
+            }
+        }
 
-        // cockpit
-        g.setColor(new Color(0x0A0D1A));
-        g.fill(new Ellipse2D.Float(121, 86, 14, 24));
-        g.setColor(new Color(255, 255, 255, 200));
-        g.fill(new Ellipse2D.Float(125, 89, 4, 9));
+        // ship axis in the icon, tail -> nose, for the rainbow sweep
+        Point2D nose = at.transform(new Point2D.Float(cx, box[1]), null);
+        Point2D tail = at.transform(new Point2D.Float(cx, box[3]), null);
+        float tx = (float) tail.getX(), ty = (float) tail.getY();
+        float ax = (float) nose.getX() - tx, ay = (float) nose.getY() - ty;
+        float len2 = ax * ax + ay * ay;
 
-        // engine cores
-        glow(g, 111, 206, 9, 0xFFFFFF);
-        glow(g, 145, 206, 9, 0xFFFFFF);
+        // dim the stars behind the hull so the outline reads as a ship
+        for (int i = 0; i < fill.length; i++) {
+            if (fill[i] > 0f) blend(img, i % S, i / S, 0x05060B, fill[i] * 0.72f);
+        }
+
+        // engine glow behind the tail
+        float ex = tx - ax * 0.05f, ey = ty - ay * 0.05f;
+        glow(g, ex, ey, 24, 0x7FE8FF);
+
+        // glow passes of the outline, then the crisp line with a hot white core
+        float[] soft = (float[]) band.clone();
+        blur(soft, S, S, 2);
+        blur(soft, S, S, 2);
+        blur(soft, S, S, 2);
+        float[] wide = (float[]) soft.clone();
+        blur(wide, S, S, 6);
+        for (int i = 0; i < band.length; i++) {
+            int x = i % S, y = i / S;
+            float t = ((x - tx) * ax + (y - ty) * ay) / len2;
+            float h = 0.02f + 0.80f * Math.max(0f, Math.min(1f, 1f - t));
+            int col = hue(h).getRGB() & 0xFFFFFF;
+            float gw = Math.min(1f, wide[i] * 2.5f) * 0.25f + Math.min(1f, soft[i] * 2f) * 0.35f;
+            if (gw > 0.003f) blend(img, x, y, col, gw);
+            if (band[i] > 0f) {
+                blend(img, x, y, col, Math.min(1f, band[i] * 1.15f));
+                blend(img, x, y, 0xFFFFFF, band[i] * band[i] * 0.35f);
+            }
+        }
+        glow(g, ex, ey, 8, 0xFFFFFF);
 
         g.dispose();
-        File out = new File(args[0]);
+        File out = new File(args[1]);
         ImageIO.write(img, "png", out);
         System.out.println("wrote " + out);
     }
 
-    /** top-down warship pointing up, mirrored around x = 128 */
-    static GeneralPath shipShape() {
-        float[][] half = {
-            {128, 42}, {137, 64}, {142, 98}, {150, 114}, {184, 134}, {210, 160}, {208, 174},
-            {172, 168}, {158, 176}, {156, 198}, {150, 204}, {138, 204}, {134, 190}, {128, 190}};
-        GeneralPath p = new GeneralPath();
-        p.moveTo(half[0][0], half[0][1]);
-        for (int i = 1; i < half.length; i++) p.lineTo(half[i][0], half[i][1]);
-        for (int i = half.length - 2; i >= 1; i--) p.lineTo(256 - half[i][0], half[i][1]);
-        p.closePath();
-        return p;
+    /** minX, minY, maxX, maxY of the pixels that are mostly opaque */
+    static int[] opaqueBounds(BufferedImage im) {
+        int[] b = {im.getWidth(), im.getHeight(), -1, -1};
+        for (int y = 0; y < im.getHeight(); y++) {
+            for (int x = 0; x < im.getWidth(); x++) {
+                if (((im.getRGB(x, y) >>> 24) & 255) > 100) {
+                    b[0] = Math.min(b[0], x);
+                    b[1] = Math.min(b[1], y);
+                    b[2] = Math.max(b[2], x);
+                    b[3] = Math.max(b[3], y);
+                }
+            }
+        }
+        return b;
+    }
+
+    /** separable box blur in place */
+    static void blur(float[] v, int w, int h, int r) {
+        float[] tmp = new float[v.length];
+        float n = 2 * r + 1;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float s = 0f;
+                for (int k = -r; r >= k; k++) {
+                    int xx = Math.max(0, Math.min(w - 1, x + k));
+                    s += v[y * w + xx];
+                }
+                tmp[y * w + x] = s / n;
+            }
+        }
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float s = 0f;
+                for (int k = -r; r >= k; k++) {
+                    int yy = Math.max(0, Math.min(h - 1, y + k));
+                    s += tmp[yy * w + x];
+                }
+                v[y * w + x] = s / n;
+            }
+        }
+    }
+
+    /** source-over of an opaque colour at the given alpha */
+    static void blend(BufferedImage img, int x, int y, int rgb, float alpha) {
+        if (0f >= alpha) return;
+        if (alpha > 1f) alpha = 1f;
+        int d = img.getRGB(x, y);
+        int da = (d >>> 24) & 255;
+        int r = Math.round(((d >> 16) & 255) * (1 - alpha) + ((rgb >> 16) & 255) * alpha);
+        int gg = Math.round(((d >> 8) & 255) * (1 - alpha) + ((rgb >> 8) & 255) * alpha);
+        int b = Math.round((d & 255) * (1 - alpha) + (rgb & 255) * alpha);
+        int na = Math.round(da + (255 - da) * alpha);
+        img.setRGB(x, y, (na << 24) | (r << 16) | (gg << 8) | b);
     }
 
     /** strokes a shape segment by segment, the hue following the angle around the icon centre */
@@ -159,12 +247,6 @@ public class MakeIcon {
 
     static Color hue(float h) {
         return Color.getHSBColor(h, 0.85f, 1f);
-    }
-
-    static Color[] translucent(Color[] cs, int a) {
-        Color[] out = new Color[cs.length];
-        for (int i = 0; i < cs.length; i++) out[i] = new Color(cs[i].getRed(), cs[i].getGreen(), cs[i].getBlue(), a);
-        return out;
     }
 
     static void glow(Graphics2D g, float cx, float cy, float radius, int rgb) {
