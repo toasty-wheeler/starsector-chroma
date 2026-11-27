@@ -312,24 +312,12 @@ public class Renderer {
                 if (d == Devices.KEYBOARD && i == KB_F && sysType != LightState.SYS_NONE) c = systemKey(sysType, sysOn, t);
 
                 if (damage > 0.04f) {
-                    c = damaged(c, d, i, damage, bucket);
-                    c = hullAlarm(c, d, i, damage, t);
+                    c = damaged(c, d, i, damage, t);
                 }
                 a[i] = c;
             }
         }
         if (ship) mouseSides(frame[Devices.MOUSE], sysType, sysOn, t);
-    }
-
-    /** hull damage alarm: a wandering set of keys blinking on and off, shifting between red and orange */
-    private int hullAlarm(int c, int d, int i, float damage, float t) {
-        int id = d * 541 + i;
-        int group = (int) (t * 2.5f);  // which keys are alarming changes 2.5 times a second
-        if (rand(id, group + 500) >= 0.06f + damage * 0.3f) return c;
-        float r = rand(id, group + 900);
-        if (frac(t * 4.5f + r) >= 0.55f) return 0;  // blink off
-        float shift = 0.5f + 0.5f * (float) Math.sin(t * 6f + r * 6.28f);
-        return lerp(0xFF1000, 0xFF7A00, shift);
     }
 
     /**
@@ -484,23 +472,30 @@ public class Renderer {
         return c;
     }
 
-    /** hull damage: keys flicker off, show glitch colours, and finally die for good */
-    private int damaged(int c, int d, int i, float damage, int bucket) {
+    /**
+     * hull damage, calm and readable: more and more keys go dark for good, some slowly fade to
+     * black and back, and a few slowly blink red/orange to black. Each key keeps its role, so
+     * nothing jumps around.
+     */
+    private int damaged(int c, int d, int i, float damage, float t) {
         int id = d * 977 + i;
-        // permanently dead LEDs once the hull is badly hurt
-        if (damage > 0.6f && (damage - 0.6f) * 1.4f > rand(id, 7)) return 0;
-        float r = rand(id, bucket);
-        if (damage * 0.4f > r) return 0;                       // flicker off
-        if (damage > 0.3f && (damage - 0.3f) * 0.55f > rand(id, bucket + 101)) {
-            int pick = (int) (rand(id, bucket + 202) * 4f);
-            switch (pick) {
-                case 0: return 0xFF9000;  // sparks
-                case 1: return 0xFF0000;
-                case 2: return 0xFF20A0;
-                default: return 0x30FFFF;
-            }
+        float role = rand(id, 7);
+        float phase = rand(id, 11);
+        // dead for good: none until 15% damage, about 60% of keys at a wrecked hull
+        if ((damage - 0.15f) * 0.7f > role) return 0;
+        // red/orange alarm keys, slow blink to black (about once a second)
+        if ((damage - 0.05f) * 0.22f > rand(id, 13)) {
+            float rate = 0.7f + 0.5f * phase;
+            float b = 0.5f + 0.5f * (float) Math.cos((t * rate + phase) * 6.2832f);
+            float shift = 0.5f + 0.5f * (float) Math.sin(t * 0.9f + phase * 6.2832f);
+            return scale(lerp(0xFF1000, 0xFF7A00, shift), b * b);
         }
-        if (damage > 0.5f) return scale(c, 1f - (damage - 0.5f) * 0.8f * rand(id, bucket + 303));
+        // slow breathing to black (one cycle every 1.5-3 s)
+        if (damage * 0.45f > rand(id, 17)) {
+            float rate = 0.35f + 0.3f * phase;
+            float b = 0.5f + 0.5f * (float) Math.cos((t * rate + phase) * 6.2832f);
+            return scale(c, b);
+        }
         return c;
     }
 

@@ -332,7 +332,7 @@ public class EffectTest {
         int alarm = 0;
         for (int i = 0; i < f[0].length; i++) {
             int c = f[0][i];
-            if (((c >> 16) & 255) > 200 && 130 > ((c >> 8) & 255) && 20 > (c & 255)) alarm++;
+            if (((c >> 16) & 255) > 60 && 20 > (c & 255)) alarm++;
         }
         expect("hull 50%: some red/orange alarm keys (" + alarm + ")", alarm >= 3 && 60 > alarm);
         f = sysScene(new Renderer(), 11, 100000L);

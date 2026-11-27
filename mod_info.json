@@ -3,7 +3,7 @@
   "name": "Star Chroma",
   "author": "toasty-wheeler",
   "version": "0.1.0",
-  "description": "Razer Chroma lighting for Starsector. Campaign: ability keys 1-0 glow light blue when ready and red while in use or cooling down; Tab, E, C, D, F, R, I, F2 (codex), F4 and F5 (quicksave/quickload) glow light blue. Combat: everything goes white, shields fill blue from the bottom up, flux heats the lights to red-orange, hull damage makes keys flicker, glitch and die, ship systems (F) get their own effects (burn streaks, teleport collapse and burst, phase shimmer, ammo-feed belts), and losing your flagship sets off an explosion. Needs Razer Synapse / Razer Chroma app running. Safe to add or remove at any time.",
+  "description": "Razer Chroma lighting for Starsector. Campaign: ability keys 1-0 glow light blue when ready and red while in use or cooling down; Tab, E, C, D, F, R, I, F2 (codex), F4 and F5 (quicksave/quickload) glow light blue. Combat: everything goes white, shields fill blue from the bottom up, flux heats the lights to red-orange, hull damage slowly fades keys to black, blinks some red/orange and shuts more off, ship systems (F) get their own effects (burn streaks, teleport collapse and burst, phase shimmer, ammo-feed belts), and losing your flagship sets off an explosion. Needs Razer Synapse / Razer Chroma app running. Safe to add or remove at any time.",
   "gameVersion": "0.98a",
   "jars": ["jars/StarChroma.jar"],
   "modPlugin": "starchroma.ChromaModPlugin"

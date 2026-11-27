@@ -33,7 +33,7 @@ Razer Chroma lighting for Starsector 0.98a. The game talks to the Razer Chroma S
   - Anything else (Damper Field, Fortress Shield, Temporal Shell, modded systems...): teal rings roll out from the middle.
   Modded systems are sorted by their id (anything with "burn", "jets", "teleport", "skimmer", "phase", "feed" and so on).
 - Flux: the white heats up to deep red-orange; the shield colour goes blue → violet → red-orange.
-- Hull damage: a red flash on every hit, and as hull drops, keys flicker off, show glitch colours (sparks, red, magenta, cyan) and eventually die for good. On top of that, a wandering set of alarm keys blinks on and off, shifting between red and orange; more of them the worse the hull gets.
+- Hull damage: a red flash on every hit. As hull drops, more and more keys go dark for good (none until 15% damage, about 60% when wrecked), some keys slowly fade to black and back every 1.5-3 s, and a few slowly blink red/orange to black about once a second. Each key keeps its role, so nothing jumps around.
 - Mouse side strips: the left side is an ammo gauge for the selected weapon group (or all ammo weapons if that group has none), brass, turning pulsing red below 25% and blinking red when empty. The right side shows the ship system: its charges stacked from the bottom in light blue with the reloading one in dim red, or for systems without charges, light blue when ready, the system's colour while on, and a red bar refilling during cooldown.
 - Overload: electric white-blue crackle. Venting: fast pulsing.
 - Flagship destroyed: a white flash, a ring of fire expanding from the middle of each device, embers, then total darkness except **Tab** (command screen), which pulses light blue. Taking command of another ship brings the lights back.
