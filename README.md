@@ -4,6 +4,22 @@
 
 Razer Chroma lighting for Starsector 0.98a. The game talks to the Razer Chroma SDK that Razer Synapse / the Razer Chroma app runs on your PC (`localhost:54235`), so there's nothing extra to install.
 
+## Install
+
+1. Download **[StarChroma.zip](https://github.com/toasty-wheeler/starsector-chroma/releases/latest/download/StarChroma.zip)** from the [latest release](https://github.com/toasty-wheeler/starsector-chroma/releases/latest).
+2. Unzip it into `Starsector/mods/` so you get `mods/StarChroma/mod_info.json`.
+3. Enable **Star Chroma** in the launcher. No other mods needed; safe to add to or remove from an existing save.
+
+Requirements: Starsector 0.98a, Windows, Razer Synapse (or the Razer Chroma app) running with Chroma Connect / app lighting allowed. No Razer hardware? The [Razer Chroma Emulator](https://github.com/WyvrnOfficial/ChromaEmulator) shows the effects on virtual devices.
+
+## Preview
+
+Rendered by `sh build.sh test` (keyboard, mouse, keypad, mousepad, headset, Chroma Link):
+
+| Combat | Ship systems, gauges, alarms | Campaign |
+|---|---|---|
+| ![combat](docs/effects.png) | ![systems](docs/systems.png) | ![campaign](docs/campaign.png) |
+
 ## What it does
 
 **Campaign**
@@ -57,6 +73,11 @@ On the title screen and when you quit, the mod releases Chroma and your normal S
 
 Hotkey colours assume the default key bindings.
 
+## Troubleshooting
+
+- `starsector.log` lines starting with `Star Chroma` say whether the mod reached the Chroma SDK.
+- If the log says it's connected but your devices don't change, Synapse is receiving the lighting but not applying it: check that app lighting / Chroma Connect is on in Synapse, restart Synapse, or reinstall its Chroma module. The Chroma Emulator is a quick way to confirm the mod itself works.
+
 ## Building
 
-No JDK needed: `sh build.sh` compiles with the game's own JRE and Janino. `sh build.sh test` renders every effect to `build/preview/effects.png`; `sh build.sh live` also plays them on your devices; `sh build.sh install` copies the mod into the game.
+No JDK needed: `sh build.sh` compiles with the game's own JRE and Janino. `sh build.sh test` renders every effect to `build/preview/*.png`; `sh build.sh live` also plays them on your devices; `sh build.sh install` copies the mod into the game.
