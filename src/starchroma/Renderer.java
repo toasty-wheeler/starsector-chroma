@@ -254,6 +254,9 @@ public class Renderer {
         shieldFill = approach(shieldFill, ship && LightState.shieldOn ? 1f : 0f, dt / 1.4f, dt / 0.6f);
         int sysType = ship ? LightState.systemType : LightState.SYS_NONE;
         boolean sysOn = ship && LightState.systemOn;
+        // the game stopped updating (left the battle oddly): don't keep showing a frozen overload
+        long seen = LightState.combatAt;
+        boolean fresh = seen == 0L || 3000L > nowMs - seen;
         boolean phasing = ship && (LightState.phased || (sysType == LightState.SYS_PHASE && sysOn));
         phaseFill = approach(phaseFill, phasing ? 1f : 0f, dt / 0.8f, dt / 0.5f);
         // the system effect fades in and out a little so short systems still read
@@ -296,11 +299,11 @@ public class Renderer {
                 else if (sysType == LightState.SYS_OTHER && systemFade > 0f) c = systemPulse(c, d, xs[i], y, t, systemFade);
                 else if (sysType == LightState.SYS_TELEPORT) c = teleport(c, d, i, xs[i], y, t, sysOn, sinceOn, ended, sinceEnd);
 
-                if (LightState.overloaded) {
+                if (ship && fresh && LightState.overloaded) {
                     // electric crackle
                     float r = rand(d * 131 + i, bucket * 3 + (int) (t * 30f));
                     c = r > 0.55f ? lerp(0x9FD8FF, 0xFFFFFF, r) : scale(c, 0.25f);
-                } else if (LightState.venting) {
+                } else if (ship && fresh && LightState.venting) {
                     c = scale(c, 0.65f + 0.35f * (float) Math.sin(t * 14f + y * 6f));
                 }
 
@@ -308,9 +311,75 @@ public class Renderer {
 
                 if (d == Devices.KEYBOARD && i == KB_F && sysType != LightState.SYS_NONE) c = systemKey(sysType, sysOn, t);
 
-                if (damage > 0.04f) c = damaged(c, d, i, damage, bucket);
+                if (damage > 0.04f) {
+                    c = damaged(c, d, i, damage, bucket);
+                    c = hullAlarm(c, d, i, damage, t);
+                }
                 a[i] = c;
             }
+        }
+        if (ship) mouseSides(frame[Devices.MOUSE], sysType, sysOn, t);
+    }
+
+    /** hull damage alarm: a wandering set of keys blinking on and off, shifting between red and orange */
+    private int hullAlarm(int c, int d, int i, float damage, float t) {
+        int id = d * 541 + i;
+        int group = (int) (t * 2.5f);  // which keys are alarming changes 2.5 times a second
+        if (rand(id, group + 500) >= 0.06f + damage * 0.3f) return c;
+        float r = rand(id, group + 900);
+        if (frac(t * 4.5f + r) >= 0.55f) return 0;  // blink off
+        float shift = 0.5f + 0.5f * (float) Math.sin(t * 6f + r * 6.28f);
+        return lerp(0xFF1000, 0xFF7A00, shift);
+    }
+
+    /**
+     * mouse side strips (Razer mouse grid column 0 = left side, 6 = right side, rows 1..7 top to
+     * bottom): left shows ammo left, right shows ship system charges / cooldown
+     */
+    private void mouseSides(int[] m, int type, boolean on, float t) {
+        float ammo = LightState.ammo;
+        if (ammo >= 0f) {
+            boolean low = 0.25f > ammo;
+            int col = low ? Config.used : AMMO_BRASS;
+            float pulse = low ? 0.6f + 0.4f * (float) Math.sin(t * 8f) : 1f;
+            for (int k = 0; 7 > k; k++) {
+                float fill = clamp01(ammo * 7f - k);     // k = 0 is the bottom LED
+                int c;
+                if (0f >= ammo) c = frac(t * 1.5f) > 0.5f ? Config.used : 0x200000;  // empty: slow red blink
+                else c = lerp(scale(col, 0.06f), scale(col, pulse), fill);
+                m[(7 - k) * 7] = c;
+            }
+        }
+        if (type == LightState.SYS_NONE) return;
+        int max = LightState.systemMaxCharges;
+        float rech = clamp01(LightState.systemRecharge);
+        for (int k = 0; 7 > k; k++) {
+            float pos = (k + 0.5f) / 7f;
+            int c;
+            if (max > 0) {
+                // charges stacked from the bottom, the one reloading in dim red above them
+                float have = LightState.systemCharges / (float) max;
+                if (have >= pos) c = on ? systemColor(type) : Config.ready;
+                else if ((LightState.systemCharges + rech) / max >= pos) c = scale(Config.used, 0.75f);
+                else c = 0x080808;
+            } else if (on) {
+                c = scale(systemColor(type), 0.75f + 0.25f * (float) Math.sin(t * 18f + k));
+            } else if (LightState.systemReady) {
+                c = Config.ready;
+            } else {
+                c = rech >= pos ? scale(Config.used, 0.75f) : 0x080808;
+            }
+            m[(7 - k) * 7 + 6] = c;
+        }
+    }
+
+    private static int systemColor(int type) {
+        switch (type) {
+            case LightState.SYS_CHARGE: return CHARGE_CORE;
+            case LightState.SYS_TELEPORT: return WARP;
+            case LightState.SYS_PHASE: return Config.phase;
+            case LightState.SYS_FEEDER: return AMMO_BRASS;
+            default: return SYSTEM_GLOW;
         }
     }
 
@@ -318,23 +387,13 @@ public class Renderer {
 
     static final int KB_F = Devices.keyIndex(Devices.KEY_F);
     static final int CHARGE_HOT = 0xFF6A10, CHARGE_CORE = 0xFFF0C8;
-    static final int AMMO_BRASS = 0xFFC21A, AMMO_FLASH = 0xFF5A00;
+    public static final int AMMO_BRASS = 0xFFC21A, AMMO_FLASH = 0xFF5A00;
     static final int WARP = 0x7FE8FF;
     static final int SYSTEM_GLOW = 0x40FFC8;
 
     /** the F key: light blue when ready, the system's colour while on, red while it recharges */
     private int systemKey(int type, boolean on, float t) {
-        if (on) {
-            int col;
-            switch (type) {
-                case LightState.SYS_CHARGE: col = CHARGE_CORE; break;
-                case LightState.SYS_TELEPORT: col = WARP; break;
-                case LightState.SYS_PHASE: col = Config.phase; break;
-                case LightState.SYS_FEEDER: col = AMMO_BRASS; break;
-                default: col = SYSTEM_GLOW; break;
-            }
-            return scale(col, 0.8f + 0.2f * (float) Math.sin(t * 18f));
-        }
+        if (on) return scale(systemColor(type), 0.8f + 0.2f * (float) Math.sin(t * 18f));
         if (LightState.systemReady) return Config.ready;
         return scale(Config.used, 0.85f + 0.15f * (float) Math.sin(t * 4f));
     }

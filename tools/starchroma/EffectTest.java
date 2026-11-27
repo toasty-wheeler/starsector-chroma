@@ -203,7 +203,8 @@ public class EffectTest {
         "burn drive ready (F light blue)", "burn drive on 0.6 s", "burn drive recharging (F red)",
         "phase skimmer: collapse 0.2 s", "phase teleporter: in transit", "teleport: reappear 0.25 s after",
         "phase cloak (system) 1.5 s", "accelerated ammo feeder 1 s", "other system (damper) 1 s",
-        "instant skimmer: burst 0.3 s"};
+        "instant skimmer: burst 0.3 s", "hull 50%: red/orange alarm keys", "mouse sides: ammo 60% / skimmer 1 of 3 + reloading",
+        "mouse sides: ammo 15% (low) / cooldown half way", "overload while ship gone (must be plain)"};
     // type, on from ms, on until ms, render at ms
     static final int[][] SYS_SCENES = {
         {LightState.SYS_CHARGE, -1, -1, 400},
@@ -215,7 +216,11 @@ public class EffectTest {
         {LightState.SYS_PHASE, 0, 5000, 1500},
         {LightState.SYS_FEEDER, 0, 5000, 1000},
         {LightState.SYS_OTHER, 0, 5000, 1000},
-        {LightState.SYS_TELEPORT, 0, 80, 650}};
+        {LightState.SYS_TELEPORT, 0, 80, 650},
+        {LightState.SYS_NONE, -1, -1, 400},
+        {LightState.SYS_TELEPORT, -1, -1, 400},
+        {LightState.SYS_CHARGE, -1, -1, 400},
+        {LightState.SYS_NONE, -1, -1, 400}};
 
     static int[][] sysScene(Renderer r, int s, long t0) {
         LightState.resetCombat();
@@ -234,6 +239,14 @@ public class EffectTest {
             LightState.systemOn = on;
             LightState.systemLevel = on ? Math.min(1f, (ms - sc[1]) / 300f) : 0f;
             LightState.systemReady = !on && LightState.systemEndAt == 0L;
+            switch (s) {
+                case 10: LightState.hull = 0.5f; break;
+                case 11: LightState.ammo = 0.6f; LightState.systemMaxCharges = 3; LightState.systemCharges = 1;
+                    LightState.systemRecharge = 0.5f; break;
+                case 12: LightState.ammo = 0.15f; LightState.systemReady = false; LightState.systemRecharge = 0.5f; break;
+                case 13: LightState.overloaded = true; LightState.hasShip = false; break;
+                default: break;
+            }
             f = r.render(t0 + ms);
         }
         return f;
@@ -313,6 +326,21 @@ public class EffectTest {
         expect("teleport in transit: keyboard mostly dark (" + bright + " bright)", 30 > bright);
         f = sysScene(new Renderer(), 1, 100000L);
         expect("burn drive: tinted warm", ((f[1][10] >> 16) & 255) > (f[1][10] & 255) + 40);
+        f = sysScene(new Renderer(), 13, 100000L);
+        expect("overload without a ship: no crackle", near(f[1][10], Config.combatWhite));
+        f = sysScene(new Renderer(), 10, 100000L);
+        int alarm = 0;
+        for (int i = 0; i < f[0].length; i++) {
+            int c = f[0][i];
+            if (((c >> 16) & 255) > 200 && 130 > ((c >> 8) & 255) && 20 > (c & 255)) alarm++;
+        }
+        expect("hull 50%: some red/orange alarm keys (" + alarm + ")", alarm >= 3 && 60 > alarm);
+        f = sysScene(new Renderer(), 11, 100000L);
+        int[] m = f[Devices.MOUSE];
+        expect("mouse left bottom = ammo brass", near(m[7 * 7], Renderer.AMMO_BRASS));
+        expect("mouse left top = empty (60% ammo)", 0x30 > ((m[1 * 7] >> 16) & 255));
+        check("mouse right bottom = charge ready", m[7 * 7 + 6], Config.ready);
+        expect("mouse right top = no charge", 0x20 > ((m[1 * 7 + 6] >> 16) & 255));
         String[][] ids = {
             {"burndrive", "1"}, {"microburn_omega", "1"}, {"maneuveringjets", "1"}, {"plasmajets", "1"}, {"convulsive_lunge", "1"},
             {"phaseteleporter", "2"}, {"displacer", "2"}, {"skimmer_drone", "2"}, {"phasecloak", "3"},

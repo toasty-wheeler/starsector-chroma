@@ -66,6 +66,15 @@ public class LightState {
     /** System.currentTimeMillis() when the system was switched on / finished (0 = never) */
     public static volatile long systemAt;
     public static volatile long systemEndAt;
+    /** system charges (e.g. Phase Skimmer); max 0 = the system has no charges, only a cooldown */
+    public static volatile int systemCharges;
+    public static volatile int systemMaxCharges;
+    /** 0..1 progress of the next charge reload, or of the cooldown (1 = ready) */
+    public static volatile float systemRecharge = 1f;
+    /** 0..1 ammo left in the selected weapon group (or the whole ship); -1 = no ammo weapons */
+    public static volatile float ammo = -1f;
+    /** System.currentTimeMillis() of the last combat update; stale state is not shown */
+    public static volatile long combatAt;
 
     public static void resetCombat() {
         hasShip = false;
@@ -83,6 +92,11 @@ public class LightState {
         systemReady = false;
         systemAt = 0L;
         systemEndAt = 0L;
+        systemCharges = 0;
+        systemMaxCharges = 0;
+        systemRecharge = 1f;
+        ammo = -1f;
+        combatAt = 0L;
     }
 
     /** sorts a ship system id into a lighting style; keyword fallbacks cover modded systems */

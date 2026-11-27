@@ -10,6 +10,8 @@ import com.fs.starfarer.api.combat.FluxTrackerAPI;
 import com.fs.starfarer.api.combat.ShieldAPI;
 import com.fs.starfarer.api.combat.ShipAPI;
 import com.fs.starfarer.api.combat.ShipSystemAPI;
+import com.fs.starfarer.api.combat.WeaponAPI;
+import com.fs.starfarer.api.combat.WeaponGroupAPI;
 
 /** Registered in data/config/settings.json "plugins"; publishes the flagship's state each frame. */
 public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
@@ -49,8 +51,9 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
 
         ShipAPI ship = engine.getPlayerShip();
         boolean alive = ship != null && ship.isAlive() && !ship.isHulk() && ship.getHitpoints() > 0f;
+        LightState.combatAt = System.currentTimeMillis();
 
-        if (alive && ship != deadShip) {
+        if (alive && ship != deadShip && engine.isEntityInPlay(ship)) {
             tracked = ship;
             deadShip = null;
             LightState.dead = false;
@@ -59,19 +62,27 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
             tracked = null;
             LightState.deathAt = System.currentTimeMillis();
             LightState.dead = true;
+        } else if (tracked != null && !engine.isEntityInPlay(tracked)) {
+            // retreated / removed from the battle: its flux tracker freezes (e.g. stuck "overloaded")
+            tracked = null;
         }
 
         if (tracked == null) {
             LightState.hasShip = false;
             LightState.systemOn = false;
+            LightState.overloaded = false;
+            LightState.venting = false;
+            LightState.ammo = -1f;
             systemWasOn = false;
             return;
         }
         FluxTrackerAPI flux = tracked.getFluxTracker();
         ShieldAPI shield = tracked.getShield();
         LightState.flux = flux != null ? flux.getFluxLevel() : 0f;
-        LightState.overloaded = flux != null && flux.isOverloaded();
+        // isOverloaded() can lag behind; trust the remaining overload time too
+        LightState.overloaded = flux != null && flux.isOverloaded() && flux.getOverloadTimeRemaining() > 0f;
         LightState.venting = flux != null && flux.isVenting();
+        LightState.ammo = readAmmo(tracked);
         LightState.hull = tracked.getHullLevel();
         LightState.shieldOn = shield != null && shield.isOn();
         LightState.phased = tracked.isPhased();
@@ -100,5 +111,37 @@ public class ChromaCombatPlugin extends BaseEveryFrameCombatPlugin {
         LightState.systemLevel = sys.getEffectLevel();
         LightState.systemOn = on;
         LightState.systemReady = !on && !sys.isCoolingDown() && !sys.isOutOfAmmo();
+
+        int max = sys.getMaxAmmo();
+        boolean charges = max >= 2 && 50 >= max;
+        LightState.systemMaxCharges = charges ? max : 0;
+        LightState.systemCharges = charges ? Math.max(0, Math.min(max, sys.getAmmo())) : 0;
+        float recharge = 1f;
+        if (charges && max > sys.getAmmo()) recharge = sys.getAmmoReloadProgress();
+        else if (sys.isCoolingDown() && sys.getCooldown() > 0f) recharge = 1f - sys.getCooldownRemaining() / sys.getCooldown();
+        else if (on) recharge = 0f;
+        LightState.systemRecharge = Math.max(0f, Math.min(1f, recharge));
+    }
+
+    /** ammo left (0..1) in the selected weapon group, or across all ammo weapons if that group has none */
+    private static float readAmmo(ShipAPI ship) {
+        WeaponGroupAPI group = ship.getSelectedGroupAPI();
+        float a = group != null ? ammoOf(group.getWeaponsCopy()) : -1f;
+        if (0f > a) a = ammoOf(ship.getAllWeapons());
+        return a;
+    }
+
+    private static float ammoOf(List weapons) {
+        if (weapons == null) return -1f;
+        float have = 0f, max = 0f;
+        for (int i = 0; i < weapons.size(); i++) {
+            WeaponAPI w = (WeaponAPI) weapons.get(i);
+            if (w == null || w.isDecorative() || !w.usesAmmo()) continue;
+            int m = w.getMaxAmmo();
+            if (0 >= m || m > 100000) continue;
+            have += Math.max(0, w.getAmmo());
+            max += m;
+        }
+        return max > 0f ? have / max : -1f;
     }
 }
