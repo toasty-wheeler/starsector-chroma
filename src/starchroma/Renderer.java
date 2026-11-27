@@ -317,8 +317,8 @@ public class Renderer {
                 a[i] = c;
             }
         }
-        if (ship) mouseSides(frame[Devices.MOUSE], sysType, sysOn, t);
         if (ship && 0.30f >= LightState.cr) crAlarm(LightState.cr, t);
+        if (ship) gauges(sysType, sysOn, t);
     }
 
     public static final int CR_YELLOW = 0xFFC800, CR_RED = 0xFF1000;
@@ -349,45 +349,64 @@ public class Renderer {
         for (int i = 0; i < pad.length; i++) pad[i] = on;
     }
 
+    // keyboard numpad: rows 1..5, columns 18-19 = ammo bar, 20-21 = system bar
+    static final int NUMPAD_TOP = 1, NUMPAD_ROWS = 5, NUMPAD_AMMO = 18, NUMPAD_SYS = 20;
+    static final int MOUSE_WHEEL = 2 * 7 + 3, MOUSE_LOGO = 7 * 7 + 3;
+
     /**
-     * mouse side strips (Razer mouse grid column 0 = left side, 6 = right side, rows 1..7 top to
-     * bottom): left shows ammo left, right shows ship system charges / cooldown
+     * gauges: mouse side strips (Razer mouse grid column 0 = left side, 6 = right side, rows 1..7
+     * top to bottom) and the keyboard numpad split in two bars. Ammo on the left, the ship system
+     * (charges / cooldown) on the right. The mouse wheel and logo show the system state like F.
      */
-    private void mouseSides(int[] m, int type, boolean on, float t) {
-        float ammo = LightState.ammo;
-        if (ammo >= 0f) {
-            boolean low = 0.25f > ammo;
-            int col = low ? Config.used : AMMO_BRASS;
-            float pulse = low ? 0.6f + 0.4f * (float) Math.sin(t * 8f) : 1f;
-            for (int k = 0; 7 > k; k++) {
-                float fill = clamp01(ammo * 7f - k);     // k = 0 is the bottom LED
-                int c;
-                if (0f >= ammo) c = frac(t * 1.5f) > 0.5f ? Config.used : 0x200000;  // empty: slow red blink
-                else c = lerp(scale(col, 0.06f), scale(col, pulse), fill);
-                m[(7 - k) * 7] = c;
-            }
+    private void gauges(int type, boolean on, float t) {
+        int[] m = frame[Devices.MOUSE];
+        int[] kb = frame[Devices.KEYBOARD];
+        boolean hasAmmo = LightState.ammo >= 0f;
+        for (int k = 0; 7 > k; k++) {
+            if (hasAmmo) m[(7 - k) * 7] = ammoLed(k, 7, t);
+            if (type != LightState.SYS_NONE) m[(7 - k) * 7 + 6] = systemLed(k, 7, type, on, t);
         }
-        if (type == LightState.SYS_NONE) return;
+        for (int k = 0; NUMPAD_ROWS > k; k++) {
+            int row = (NUMPAD_TOP + NUMPAD_ROWS - 1 - k) * 22;
+            int a = hasAmmo ? ammoLed(k, NUMPAD_ROWS, t) : 0x080808;
+            int s = type != LightState.SYS_NONE ? systemLed(k, NUMPAD_ROWS, type, on, t) : 0x080808;
+            kb[row + NUMPAD_AMMO] = a;
+            kb[row + NUMPAD_AMMO + 1] = a;
+            kb[row + NUMPAD_SYS] = s;
+            kb[row + NUMPAD_SYS + 1] = s;
+        }
+        if (type != LightState.SYS_NONE) {
+            int c = systemKey(type, on, t);
+            m[MOUSE_WHEEL] = c;
+            m[MOUSE_LOGO] = c;
+        }
+    }
+
+    /** LED k (0 = bottom) of an n-LED ammo bar: brass, pulsing red below 25%, blinking red when empty */
+    private int ammoLed(int k, int n, float t) {
+        float ammo = LightState.ammo;
+        if (0f >= ammo) return frac(t * 1.5f) > 0.5f ? Config.used : 0x200000;
+        boolean low = 0.25f > ammo;
+        int col = low ? Config.used : AMMO_BRASS;
+        float pulse = low ? 0.6f + 0.4f * (float) Math.sin(t * 8f) : 1f;
+        float fill = clamp01(ammo * n - k);
+        return lerp(scale(col, 0.06f), scale(col, pulse), fill);
+    }
+
+    /** LED k (0 = bottom) of an n-LED system bar: charges in light blue, the reloading one / cooldown in red */
+    private int systemLed(int k, int n, int type, boolean on, float t) {
         int max = LightState.systemMaxCharges;
         float rech = clamp01(LightState.systemRecharge);
-        for (int k = 0; 7 > k; k++) {
-            float pos = (k + 0.5f) / 7f;
-            int c;
-            if (max > 0) {
-                // charges stacked from the bottom, the one reloading in dim red above them
-                float have = LightState.systemCharges / (float) max;
-                if (have >= pos) c = on ? systemColor(type) : Config.ready;
-                else if ((LightState.systemCharges + rech) / max >= pos) c = scale(Config.used, 0.75f);
-                else c = 0x080808;
-            } else if (on) {
-                c = scale(systemColor(type), 0.75f + 0.25f * (float) Math.sin(t * 18f + k));
-            } else if (LightState.systemReady) {
-                c = Config.ready;
-            } else {
-                c = rech >= pos ? scale(Config.used, 0.75f) : 0x080808;
-            }
-            m[(7 - k) * 7 + 6] = c;
+        float pos = (k + 0.5f) / n;
+        if (max > 0) {
+            float have = LightState.systemCharges / (float) max;
+            if (have >= pos) return on ? systemColor(type) : Config.ready;
+            if ((LightState.systemCharges + rech) / max >= pos) return scale(Config.used, 0.75f);
+            return 0x080808;
         }
+        if (on) return scale(systemColor(type), 0.75f + 0.25f * (float) Math.sin(t * 18f + k));
+        if (LightState.systemReady) return Config.ready;
+        return rech >= pos ? scale(Config.used, 0.75f) : 0x080808;
     }
 
     private static int systemColor(int type) {

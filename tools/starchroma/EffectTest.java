@@ -354,6 +354,13 @@ public class EffectTest {
         check("CR 10%: number row red", f[0][1 * 22 + 6], Renderer.CR_RED);
         f = sysScene(new Renderer(), 1, 100000L);
         expect("full CR: no outline", near(f[0][5 * 22 + 1], Config.combatWhite) || f[0][5 * 22 + 1] != Renderer.CR_YELLOW);
+        f = sysScene(new Renderer(), 11, 100000L);
+        expect("numpad ammo bar bottom = brass", near(f[0][5 * 22 + 18], Renderer.AMMO_BRASS) && near(f[0][5 * 22 + 19], Renderer.AMMO_BRASS));
+        expect("numpad ammo bar top = empty (60%)", 0x30 > ((f[0][1 * 22 + 18] >> 16) & 255));
+        check("numpad system bar bottom = charge ready", f[0][5 * 22 + 21], Config.ready);
+        expect("numpad system bar top = no charge", 0x20 > ((f[0][1 * 22 + 20] >> 16) & 255));
+        check("mouse wheel = system ready", f[Devices.MOUSE][2 * 7 + 3], Config.ready);
+        check("mouse logo = system ready", f[Devices.MOUSE][7 * 7 + 3], Config.ready);
         String[][] ids = {
             {"burndrive", "1"}, {"microburn_omega", "1"}, {"maneuveringjets", "1"}, {"plasmajets", "1"}, {"convulsive_lunge", "1"},
             {"phaseteleporter", "2"}, {"displacer", "2"}, {"skimmer_drone", "2"}, {"phasecloak", "3"},
